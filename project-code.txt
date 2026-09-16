@@ -1,0 +1,3482 @@
+﻿
+
+============================================================
+
+FILE: package.json
+
+============================================================
+
+{
+  "name": "talent-iq",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "build": "npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend",
+    "start": "npm run start --prefix backend"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "mongodb": "^7.6.0"
+  }
+}
+
+
+
+============================================================
+
+FILE: README.md
+
+============================================================
+
+<h1 align="center">âœ¨ Full-Stack Interview Platform âœ¨</h1>
+
+![Demo App](/frontend/public/screenshot-for-readme.png)
+
+âœ¨ Highlights:
+
+- ðŸ§‘â€ðŸ’» VSCode-Powered Code Editor
+- ðŸ” Authentication via Clerk
+- ðŸŽ¥ 1-on-1 Video Interview Rooms
+- ðŸ§­ Dashboard with Live Stats
+- ðŸ”Š Mic & Camera Toggle, Screen Sharing & Recording
+- ðŸ’¬ Real-time Chat Messaging
+- âš™ï¸ Secure Code Execution in Isolated Environment
+- ðŸŽ¯ Auto Feedback â€” Success / Fail based on test cases
+- ðŸŽ‰ Confetti on Success + Notifications on Fail
+- ðŸ§© Practice Problems Page (solo coding mode)
+- ðŸ”’ Room Locking â€” allows only 2 participants
+- ðŸ§  Background Jobs with Inngest (async tasks)
+- ðŸ§° REST API with Node.js & Express
+- âš¡ Data Fetching & Caching via TanStack Query
+- ðŸ¤– CodeRabbit for PR Analysis & Code Optimization
+- ðŸ§‘â€ðŸ’» Git & GitHub Workflow (branches, PRs, merges)
+- ðŸš€ Deployment on Sevalla (free-tier friendly)
+
+---
+
+## ðŸ§ª .env Setup
+
+### Backend (`/backend`)
+
+```bash
+PORT=3000
+NODE_ENV=development
+
+DB_URL=your_mongodb_connection_url
+
+INNGEST_EVENT_KEY=your_inngest_event_key
+INNGEST_SIGNING_KEY=your_inngest_signing_key
+
+STREAM_API_KEY=your_stream_api_key
+STREAM_API_SECRET=your_stream_api_secret
+
+CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
+CLERK_SECRET_KEY=your_clerk_secret_key
+
+CLIENT_URL=http://localhost:5173
+```
+
+### Frontend (`/frontend`)
+
+```bash
+VITE_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
+
+VITE_API_URL=http://localhost:3000/api
+
+VITE_STREAM_API_KEY=your_stream_api_key
+```
+
+---
+
+## ðŸ”§ Run the Backend
+
+```bash
+
+cd backend
+npm install
+npm run dev
+```
+
+---
+
+## ðŸ”§ Run the Frontend
+
+```
+bash
+cd frontend
+npm install
+npm run dev
+```
+
+
+
+============================================================
+
+FILE: backend\.env
+
+============================================================
+
+PORT=3000
+NODE_ENV=development
+
+DB_URL=mongodb+srv://rairpsharma_db_user:5lVXvmIkzsRI1NUg@cluster0.magzpww.mongodb.net/?appName=Cluster0
+
+INNGEST_EVENT_KEY=uS0sxR-A8nE0vuRapFrn4u_VVHP6xAWqIc8bIK-NKk2og9A1p7W2vIOw8pMaDHf0-D_eSu_tpnSWyXBgimVy7Q
+INNGEST_SIGNING_KEY=signkey-prod-3801a6217d4284bba0247e321d2b59717580c39d4ddfeef3d55df02ce80a2b5b
+
+STREAM_API_KEY=vyvdr6ra99fp
+STREAM_API_SECRET=6et7kxv4h7bp7gmmvf7jfvr8ekg6u9qeztsmgxe5dxddp994m8qx58dnehawkgf9
+
+CLERK_PUBLISHABLE_KEY=pk_test_Zmxvd2luZy1tYXN0aWZmLTQ5Ni5jbGVyay5hY2NvdW50cy5kZXYk
+CLERK_SECRET_KEY=sk_test_8j48kLxH5wAIx1DLlSuinM0DsVphxdIQDux9LTJqlD
+
+CLIENT_URL=http://localhost:5173
+
+
+============================================================
+
+FILE: backend\package.json
+
+============================================================
+
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js"
+  },
+  "type": "module",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@clerk/express": "^1.7.41",
+    "@stream-io/node-sdk": "^0.7.12",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "inngest": "^3.54.0",
+    "mongoose": "^8.19.1",
+    "stream-chat": "^9.24.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
+
+
+
+============================================================
+
+FILE: backend\src\server.js
+
+============================================================
+
+import express from "express";
+import path from "path";
+import cors from "cors";
+import { serve } from "inngest/express";
+import { clerkMiddleware } from "@clerk/express";
+
+import { ENV } from "./lib/env.js";
+import { connectDB } from "./lib/db.js";
+import { inngest, functions } from "./lib/inngest.js";
+
+import chatRoutes from "./routes/chatRoutes.js";
+import sessionRoutes from "./routes/sessionRoute.js";
+
+const app = express();
+
+const __dirname = path.resolve();
+
+// middleware
+app.use(express.json());
+// credentials:true meaning?? => server allows a browser to include cookies on request
+app.use(cors({ origin: ENV.CLIENT_URL, credentials: true }));
+app.use(clerkMiddleware()); // this adds auth field to request object: req.auth()
+console.log("Signing Key check:", ENV.INNGEST_SIGNING_KEY ? "EXISTS" : "UNDEFINED");
+app.use(
+  "/api/inngest",
+  serve({
+    client: inngest,
+    functions,
+    
+  })
+);
+app.use("/api/chat", chatRoutes);
+app.use("/api/sessions", sessionRoutes);
+
+app.get("/health", (req, res) => {
+  res.status(200).json({ msg: "api is up and running" });
+});
+
+// make our app ready for deployment
+if (ENV.NODE_ENV === "production") {
+  app.use(express.static(path.join(__dirname, "../frontend/dist")));
+
+  app.get("/{*any}", (req, res) => {
+    res.sendFile(path.join(__dirname, "../frontend", "dist", "index.html"));
+  });
+}
+
+const startServer = async () => {
+  try {
+    await connectDB();
+    app.listen(ENV.PORT, () => console.log("Server is running on port:", ENV.PORT));
+  } catch (error) {
+    console.error("ðŸ’¥ Error starting the server", error);
+  }
+};
+
+startServer();
+
+
+
+============================================================
+
+FILE: backend\src\controllers\chatController.js
+
+============================================================
+
+import { chatClient } from "../lib/stream.js";
+
+export async function getStreamToken(req, res) {
+  try {
+    // use clerkId for Stream (not mongodb _id)=> it should match the id we have in the stream dashboard
+    const token = chatClient.createToken(req.user.clerkId);
+
+    res.status(200).json({
+      token,
+      userId: req.user.clerkId,
+      userName: req.user.name,
+      userImage: req.user.image,
+    });
+  } catch (error) {
+    console.log("Error in getStreamToken controller:", error.message);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+}
+
+
+
+============================================================
+
+FILE: backend\src\controllers\sessionController.js
+
+============================================================
+
+import { chatClient, streamClient } from "../lib/stream.js";
+import Session from "../models/Session.js";
+
+export async function createSession(req, res) {
+  try {
+    const { problem, difficulty } = req.body;
+    const userId = req.user._id;
+    const clerkId = req.user.clerkId;
+
+    if (!problem || !difficulty) {
+      return res.status(400).json({ message: "Problem and difficulty are required" });
+    }
+
+    // generate a unique call id for stream video
+    const callId = `session_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+    // create session in db
+    const session = await Session.create({ problem, difficulty, host: userId, callId });
+
+    // create stream video call
+    await streamClient.video.call("default", callId).getOrCreate({
+      data: {
+        created_by_id: clerkId,
+        custom: { problem, difficulty, sessionId: session._id.toString() },
+      },
+    });
+
+    // chat messaging
+    const channel = chatClient.channel("messaging", callId, {
+      name: `${problem} Session`,
+      created_by_id: clerkId,
+      members: [clerkId],
+    });
+
+    await channel.create();
+
+    res.status(201).json({ session });
+  } catch (error) {
+    console.log("Error in createSession controller:", error.message);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+}
+
+export async function getActiveSessions(_, res) {
+  try {
+    const sessions = await Session.find({ status: "active" })
+      .populate("host", "name profileImage email clerkId")
+      .populate("participant", "name profileImage email clerkId")
+      .sort({ createdAt: -1 })
+      .limit(20);
+
+    res.status(200).json({ sessions });
+  } catch (error) {
+    console.log("Error in getActiveSessions controller:", error.message);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+}
+
+export async function getMyRecentSessions(req, res) {
+  try {
+    const userId = req.user._id;
+
+    // get sessions where user is either host or participant
+    const sessions = await Session.find({
+      status: "completed",
+      $or: [{ host: userId }, { participant: userId }],
+    })
+      .sort({ createdAt: -1 })
+      .limit(20);
+
+    res.status(200).json({ sessions });
+  } catch (error) {
+    console.log("Error in getMyRecentSessions controller:", error.message);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+}
+
+export async function getSessionById(req, res) {
+  try {
+    const { id } = req.params;
+
+    const session = await Session.findById(id)
+      .populate("host", "name email profileImage clerkId")
+      .populate("participant", "name email profileImage clerkId");
+
+    if (!session) return res.status(404).json({ message: "Session not found" });
+
+    res.status(200).json({ session });
+  } catch (error) {
+    console.log("Error in getSessionById controller:", error.message);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+}
+
+export async function joinSession(req, res) {
+  try {
+    const { id } = req.params;
+    const userId = req.user._id;
+    const clerkId = req.user.clerkId;
+
+    const session = await Session.findById(id);
+
+    if (!session) return res.status(404).json({ message: "Session not found" });
+
+    if (session.status !== "active") {
+      return res.status(400).json({ message: "Cannot join a completed session" });
+    }
+
+    if (session.host.toString() === userId.toString()) {
+      return res.status(400).json({ message: "Host cannot join their own session as participant" });
+    }
+
+    // check if session is already full - has a participant
+    if (session.participant) return res.status(409).json({ message: "Session is full" });
+
+    session.participant = userId;
+    await session.save();
+
+    const channel = chatClient.channel("messaging", session.callId);
+    await channel.addMembers([clerkId]);
+
+    res.status(200).json({ session });
+  } catch (error) {
+    console.log("Error in joinSession controller:", error.message);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+}
+
+export async function endSession(req, res) {
+  try {
+    const { id } = req.params;
+    const userId = req.user._id;
+
+    const session = await Session.findById(id);
+
+    if (!session) return res.status(404).json({ message: "Session not found" });
+
+    // check if user is the host
+    if (session.host.toString() !== userId.toString()) {
+      return res.status(403).json({ message: "Only the host can end the session" });
+    }
+
+    // check if session is already completed
+    if (session.status === "completed") {
+      return res.status(400).json({ message: "Session is already completed" });
+    }
+
+    // delete stream video call
+    const call = streamClient.video.call("default", session.callId);
+    await call.delete({ hard: true });
+
+    // delete stream chat channel
+    const channel = chatClient.channel("messaging", session.callId);
+    await channel.delete();
+
+    session.status = "completed";
+    await session.save();
+
+    res.status(200).json({ session, message: "Session ended successfully" });
+  } catch (error) {
+    console.log("Error in endSession controller:", error.message);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+}
+
+
+
+============================================================
+
+FILE: backend\src\lib\db.js
+
+============================================================
+
+import mongoose from "mongoose";
+import dns from "node:dns";
+import { ENV } from "./env.js";
+dns.setServers(["8.8.8.8","8.8.4.4"])
+export const connectDB = async () => {
+  try {
+    if (!ENV.DB_URL) {
+      throw new Error("DB_URL is not defined in environment variables");
+    }
+    const conn = await mongoose.connect(ENV.DB_URL);
+    console.log("âœ… Connected to MongoDB:", conn.connection.host);
+  } catch (error) {
+    console.error("âŒ Error connecting to MongoDB", error);
+    process.exit(1); // 0 means success, 1 means failure
+  }
+};
+
+
+
+============================================================
+
+FILE: backend\src\lib\env.js
+
+============================================================
+
+import dotenv from "dotenv";
+
+dotenv.config({ quiet: true });
+
+export const ENV = {
+  PORT: process.env.PORT,
+  DB_URL: process.env.DB_URL,
+  NODE_ENV: process.env.NODE_ENV,
+  CLIENT_URL: process.env.CLIENT_URL,
+  INNGEST_EVENT_KEY: process.env.INNGEST_EVENT_KEY,
+  INNGEST_SIGNING_KEY: process.env.INNGEST_SIGNING_KEY,
+  STREAM_API_KEY: process.env.STREAM_API_KEY,
+  STREAM_API_SECRET: process.env.STREAM_API_SECRET,
+};
+
+
+
+============================================================
+
+FILE: backend\src\lib\inngest.js
+
+============================================================
+
+import { Inngest } from "inngest";
+import { connectDB } from "./db.js";
+import User from "../models/User.js";
+import { deleteStreamUser, upsertStreamUser } from "./stream.js";
+import { ENV } from "./env.js";
+
+export const inngest = new Inngest({
+  id: "talent-iq",
+  signingKey: ENV.INNGEST_SIGNING_KEY,
+});
+
+const syncUser = inngest.createFunction(
+  { id: "sync-user" },
+  { event: "clerk/user.created" },
+  async ({ event }) => {
+    await connectDB();
+
+    const { id, email_addresses, first_name, last_name, image_url } = event.data;
+
+    const newUser = {
+      clerkId: id,
+      email: email_addresses[0]?.email_address,
+      name: `${first_name || ""} ${last_name || ""}`,
+      profileImage: image_url,
+    };
+
+    await User.create(newUser);
+
+    await upsertStreamUser({
+      id: newUser.clerkId.toString(),
+      name: newUser.name,
+      image: newUser.profileImage,
+    });
+  }
+);
+
+const deleteUserFromDB = inngest.createFunction(
+  { id: "delete-user-from-db" },
+  { event: "clerk/user.deleted" },
+  async ({ event }) => {
+    await connectDB();
+
+    const { id } = event.data;
+    await User.deleteOne({ clerkId: id });
+
+    await deleteStreamUser(id.toString());
+  }
+);
+
+export const functions = [syncUser, deleteUserFromDB];
+
+
+
+============================================================
+
+FILE: backend\src\lib\stream.js
+
+============================================================
+
+import { StreamChat } from "stream-chat";
+import { StreamClient } from "@stream-io/node-sdk";
+import { ENV } from "./env.js";
+
+const apiKey = ENV.STREAM_API_KEY;
+const apiSecret = ENV.STREAM_API_SECRET;
+
+if (!apiKey || !apiSecret) {
+  console.error("STREAM_API_KEY or STREAM_API_SECRET is missing");
+}
+
+export const chatClient = StreamChat.getInstance(apiKey, apiSecret); // will be used chat features
+export const streamClient = new StreamClient(apiKey, apiSecret); // will be used for video calls
+
+export const upsertStreamUser = async (userData) => {
+  try {
+    await chatClient.upsertUser(userData);
+    console.log("Stream user upserted successfully:", userData);
+  } catch (error) {
+    console.error("Error upserting Stream user:", error);
+  }
+};
+
+export const deleteStreamUser = async (userId) => {
+  try {
+    await chatClient.deleteUser(userId);
+    console.log("Stream user deleted successfully:", userId);
+  } catch (error) {
+    console.error("Error deleting the Stream user:", error);
+  }
+};
+
+
+
+============================================================
+
+FILE: backend\src\middleware\protectRoute.js
+
+============================================================
+
+import { requireAuth } from "@clerk/express";
+import User from "../models/User.js";
+
+export const protectRoute = [
+  requireAuth(),
+  async (req, res, next) => {
+    try {
+      const clerkId = req.auth().userId;
+
+      if (!clerkId) return res.status(401).json({ message: "Unauthorized - invalid token" });
+
+      // find user in db by clerk ID
+      const user = await User.findOne({ clerkId });
+
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      // attach user to req
+      req.user = user;
+
+      next();
+    } catch (error) {
+      console.error("Error in protectRoute middleware", error);
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  },
+];
+
+
+
+============================================================
+
+FILE: backend\src\models\Session.js
+
+============================================================
+
+import mongoose from "mongoose";
+
+const sessionSchema = new mongoose.Schema(
+  {
+    problem: {
+      type: String,
+      required: true,
+    },
+    difficulty: {
+      type: String,
+      enum: ["easy", "medium", "hard"],
+      required: true,
+    },
+    host: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    participant: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    status: {
+      type: String,
+      enum: ["active", "completed"],
+      default: "active",
+    },
+    // stream video call ID
+    callId: {
+      type: String,
+      default: "",
+    },
+  },
+  { timestamps: true }
+);
+
+const Session = mongoose.model("Session", sessionSchema);
+
+export default Session;
+
+
+
+============================================================
+
+FILE: backend\src\models\User.js
+
+============================================================
+
+import mongoose from "mongoose";
+
+const userSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+    },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+    },
+    profileImage: {
+      type: String,
+      default: "",
+    },
+    clerkId: {
+      type: String,
+      required: true,
+      unique: true,
+    },
+  },
+  { timestamps: true } // createdAt, updatedAt
+);
+
+const User = mongoose.model("User", userSchema);
+
+export default User;
+
+
+
+============================================================
+
+FILE: backend\src\routes\chatRoutes.js
+
+============================================================
+
+import express from "express";
+import { getStreamToken } from "../controllers/chatController.js";
+import { protectRoute } from "../middleware/protectRoute.js";
+
+const router = express.Router();
+
+router.get("/token", protectRoute, getStreamToken);
+
+export default router;
+
+
+
+============================================================
+
+FILE: backend\src\routes\sessionRoute.js
+
+============================================================
+
+import express from "express";
+import { protectRoute } from "../middleware/protectRoute.js";
+import {
+  createSession,
+  endSession,
+  getActiveSessions,
+  getMyRecentSessions,
+  getSessionById,
+  joinSession,
+} from "../controllers/sessionController.js";
+
+const router = express.Router();
+
+router.post("/", protectRoute, createSession);
+router.get("/active", protectRoute, getActiveSessions);
+router.get("/my-recent", protectRoute, getMyRecentSessions);
+
+router.get("/:id", protectRoute, getSessionById);
+router.post("/:id/join", protectRoute, joinSession);
+router.post("/:id/end", protectRoute, endSession);
+
+export default router;
+
+
+
+============================================================
+
+FILE: frontend\.env
+
+============================================================
+
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_Zmxvd2luZy1tYXN0aWZmLTQ5Ni5jbGVyay5hY2NvdW50cy5kZXYk
+
+VITE_API_URL=http://localhost:3000/api
+
+VITE_STREAM_API_KEY=vyvdr6ra99fp
+
+
+============================================================
+
+FILE: frontend\eslint.config.js
+
+============================================================
+
+import js from '@eslint/js'
+import globals from 'globals'
+import reactHooks from 'eslint-plugin-react-hooks'
+import reactRefresh from 'eslint-plugin-react-refresh'
+import { defineConfig, globalIgnores } from 'eslint/config'
+
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{js,jsx}'],
+    extends: [
+      js.configs.recommended,
+      reactHooks.configs['recommended-latest'],
+      reactRefresh.configs.vite,
+    ],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: globals.browser,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        ecmaFeatures: { jsx: true },
+        sourceType: 'module',
+      },
+    },
+    rules: {
+      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+    },
+  },
+])
+
+
+
+============================================================
+
+FILE: frontend\index.html
+
+============================================================
+
+<!DOCTYPE html>
+<html lang="en" data-theme="forest">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vite + React</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+
+
+
+============================================================
+
+FILE: frontend\package.json
+
+============================================================
+
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@clerk/clerk-react": "^5.53.3",
+    "@monaco-editor/react": "^4.7.0",
+    "@stream-io/video-react-sdk": "^1.24.0",
+    "@tailwindcss/vite": "^4.1.14",
+    "@tanstack/react-query": "^5.90.5",
+    "axios": "^1.12.2",
+    "canvas-confetti": "^1.9.3",
+    "date-fns": "^4.1.0",
+    "lucide-react": "^0.548.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-hot-toast": "^2.6.0",
+    "react-resizable-panels": "^3.0.6",
+    "react-router": "^7.9.4",
+    "stream-chat": "^9.23.0",
+    "stream-chat-react": "^13.9.0",
+    "tailwindcss": "^4.1.14"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.3",
+    "baseline-browser-mapping": "^2.11.14",
+    "daisyui": "^5.3.10",
+    "eslint": "^9.36.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.20",
+    "globals": "^16.4.0",
+    "vite": "^7.1.7"
+  }
+}
+
+
+
+============================================================
+
+FILE: frontend\README.md
+
+============================================================
+
+# React + Vite
+
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+
+Currently, two official plugins are available:
+
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+
+## Expanding the ESLint configuration
+
+If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+
+
+
+============================================================
+
+FILE: frontend\vite.config.js
+
+============================================================
+
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+
+// https://vite.dev/config/
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+});
+
+
+
+============================================================
+
+FILE: frontend\src\App.jsx
+
+============================================================
+
+import { useUser } from "@clerk/clerk-react";
+import { Navigate, Route, Routes } from "react-router";
+import HomePage from "./pages/HomePage";
+
+import { Toaster } from "react-hot-toast";
+import DashboardPage from "./pages/DashboardPage";
+import ProblemPage from "./pages/ProblemPage";
+import ProblemsPage from "./pages/ProblemsPage";
+import SessionPage from "./pages/SessionPage";
+
+function App() {
+  const { isSignedIn, isLoaded } = useUser();
+
+  // this will get rid of the flickering effect
+  if (!isLoaded) return null;
+
+  return (
+    <>
+      <Routes>
+        <Route path="/" element={!isSignedIn ? <HomePage /> : <Navigate to={"/dashboard"} />} />
+        <Route path="/dashboard" element={isSignedIn ? <DashboardPage /> : <Navigate to={"/"} />} />
+
+        <Route path="/problems" element={isSignedIn ? <ProblemsPage /> : <Navigate to={"/"} />} />
+        <Route path="/problem/:id" element={isSignedIn ? <ProblemPage /> : <Navigate to={"/"} />} />
+        <Route path="/session/:id" element={isSignedIn ? <SessionPage /> : <Navigate to={"/"} />} />
+      </Routes>
+
+      <Toaster toastOptions={{ duration: 3000 }} />
+    </>
+  );
+}
+
+export default App;
+
+
+
+============================================================
+
+FILE: frontend\src\index.css
+
+============================================================
+
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: all;
+}
+
+/* Add cursor pointer to buttons by default - this is coming from tailwind docs */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+
+
+============================================================
+
+FILE: frontend\src\main.jsx
+
+============================================================
+
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import "./index.css";
+import App from "./App.jsx";
+import { ClerkProvider } from "@clerk/clerk-react";
+import { BrowserRouter } from "react-router";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+// Import your Publishable Key
+const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+
+if (!PUBLISHABLE_KEY) {
+  throw new Error("Missing Clerk Publishable Key");
+}
+
+const queryClient = new QueryClient();
+
+createRoot(document.getElementById("root")).render(
+  <StrictMode>
+    <BrowserRouter>
+      <QueryClientProvider client={queryClient}>
+        <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
+          <App />
+        </ClerkProvider>
+      </QueryClientProvider>
+    </BrowserRouter>
+  </StrictMode>
+);
+
+
+
+============================================================
+
+FILE: frontend\src\api\sessions.js
+
+============================================================
+
+import axiosInstance from "../lib/axios";
+
+export const sessionApi = {
+  createSession: async (data) => {
+    const response = await axiosInstance.post("/sessions", data);
+    return response.data;
+  },
+
+  getActiveSessions: async () => {
+    const response = await axiosInstance.get("/sessions/active");
+    return response.data;
+  },
+  getMyRecentSessions: async () => {
+    const response = await axiosInstance.get("/sessions/my-recent");
+    return response.data;
+  },
+
+  getSessionById: async (id) => {
+    const response = await axiosInstance.get(`/sessions/${id}`);
+    return response.data;
+  },
+
+  joinSession: async (id) => {
+    const response = await axiosInstance.post(`/sessions/${id}/join`);
+    return response.data;
+  },
+  endSession: async (id) => {
+    const response = await axiosInstance.post(`/sessions/${id}/end`);
+    return response.data;
+  },
+  getStreamToken: async () => {
+    const response = await axiosInstance.get(`/chat/token`);
+    return response.data;
+  },
+};
+
+
+
+============================================================
+
+FILE: frontend\src\components\ActiveSessions.jsx
+
+============================================================
+
+import {
+  ArrowRightIcon,
+  Code2Icon,
+  CrownIcon,
+  SparklesIcon,
+  UsersIcon,
+  ZapIcon,
+  LoaderIcon,
+} from "lucide-react";
+import { Link } from "react-router";
+import { getDifficultyBadgeClass } from "../lib/utils";
+
+function ActiveSessions({ sessions, isLoading, isUserInSession }) {
+  return (
+    <div className="lg:col-span-2 card bg-base-100 border-2 border-primary/20 hover:border-primary/30 h-full">
+      <div className="card-body">
+        {/* HEADERS SECTION */}
+        <div className="flex items-center justify-between mb-6">
+          {/* TITLE AND ICON */}
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-gradient-to-br from-primary to-secondary rounded-xl">
+              <ZapIcon className="size-5" />
+            </div>
+            <h2 className="text-2xl font-black">Live Sessions</h2>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="size-2 bg-success rounded-full" />
+            <span className="text-sm font-medium text-success">{sessions.length} active</span>
+          </div>
+        </div>
+
+        {/* SESSIONS LIST */}
+        <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <LoaderIcon className="size-10 animate-spin text-primary" />
+            </div>
+          ) : sessions.length > 0 ? (
+            sessions.map((session) => (
+              <div
+                key={session._id}
+                className="card bg-base-200 border-2 border-base-300 hover:border-primary/50"
+              >
+                <div className="flex items-center justify-between gap-4 p-5">
+                  {/* LEFT SIDE */}
+                  <div className="flex items-center gap-4 flex-1">
+                    <div className="relative size-14 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+                      <Code2Icon className="size-7 text-white" />
+                      <div className="absolute -top-1 -right-1 size-4 bg-success rounded-full border-2 border-base-100" />
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="font-bold text-lg truncate">{session.problem}</h3>
+                        <span
+                          className={`badge badge-sm ${getDifficultyBadgeClass(
+                            session.difficulty
+                          )}`}
+                        >
+                          {session.difficulty.slice(0, 1).toUpperCase() +
+                            session.difficulty.slice(1)}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-4 text-sm opacity-80">
+                        <div className="flex items-center gap-1.5">
+                          <CrownIcon className="size-4" />
+                          <span className="font-medium">{session.host?.name}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <UsersIcon className="size-4" />
+                          <span className="text-xs">{session.participant ? "2/2" : "1/2"}</span>
+                        </div>
+                        {session.participant && !isUserInSession(session) ? (
+                          <span className="badge badge-error badge-sm">FULL</span>
+                        ) : (
+                          <span className="badge badge-success badge-sm">OPEN</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {session.participant && !isUserInSession(session) ? (
+                    <button className="btn btn-disabled btn-sm">Full</button>
+                  ) : (
+                    <Link to={`/session/${session._id}`} className="btn btn-primary btn-sm gap-2">
+                      {isUserInSession(session) ? "Rejoin" : "Join"}
+                      <ArrowRightIcon className="size-4" />
+                    </Link>
+                  )}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="text-center py-16">
+              <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-primary/20 to-secondary/20 rounded-3xl flex items-center justify-center">
+                <SparklesIcon className="w-10 h-10 text-primary/50" />
+              </div>
+              <p className="text-lg font-semibold opacity-70 mb-1">No active sessions</p>
+              <p className="text-sm opacity-50">Be the first to create one!</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+export default ActiveSessions;
+
+
+
+============================================================
+
+FILE: frontend\src\components\CodeEditorPanel.jsx
+
+============================================================
+
+import Editor from "@monaco-editor/react";
+import { Loader2Icon, PlayIcon } from "lucide-react";
+import { LANGUAGE_CONFIG } from "../data/problems";
+
+function CodeEditorPanel({
+  selectedLanguage,
+  code,
+  isRunning,
+  onLanguageChange,
+  onCodeChange,
+  onRunCode,
+}) {
+  return (
+    <div className="h-full bg-base-300 flex flex-col">
+      <div className="flex items-center justify-between px-4 py-3 bg-base-100 border-t border-base-300">
+        <div className="flex items-center gap-3">
+          <img
+            src={LANGUAGE_CONFIG[selectedLanguage].icon}
+            alt={LANGUAGE_CONFIG[selectedLanguage].name}
+            className="size-6"
+          />
+          <select className="select select-sm" value={selectedLanguage} onChange={onLanguageChange}>
+            {Object.entries(LANGUAGE_CONFIG).map(([key, lang]) => (
+              <option key={key} value={key}>
+                {lang.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <button className="btn btn-primary btn-sm gap-2" disabled={isRunning} onClick={onRunCode}>
+          {isRunning ? (
+            <>
+              <Loader2Icon className="size-4 animate-spin" />
+              Running...
+            </>
+          ) : (
+            <>
+              <PlayIcon className="size-4" />
+              Run Code
+            </>
+          )}
+        </button>
+      </div>
+
+      <div className="flex-1">
+        <Editor
+          height={"100%"}
+          language={LANGUAGE_CONFIG[selectedLanguage].monacoLang}
+          value={code}
+          onChange={onCodeChange}
+          theme="vs-dark"
+          options={{
+            fontSize: 16,
+            lineNumbers: "on",
+            scrollBeyondLastLine: false,
+            automaticLayout: true,
+            minimap: { enabled: false },
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+export default CodeEditorPanel;
+
+
+
+============================================================
+
+FILE: frontend\src\components\CreateSessionModal.jsx
+
+============================================================
+
+import { Code2Icon, LoaderIcon, PlusIcon } from "lucide-react";
+import { PROBLEMS } from "../data/problems";
+
+function CreateSessionModal({
+  isOpen,
+  onClose,
+  roomConfig,
+  setRoomConfig,
+  onCreateRoom,
+  isCreating,
+}) {
+  const problems = Object.values(PROBLEMS);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="modal modal-open">
+      <div className="modal-box max-w-2xl">
+        <h3 className="font-bold text-2xl mb-6">Create New Session</h3>
+
+        <div className="space-y-8">
+          {/* PROBLEM SELECTION */}
+          <div className="space-y-2">
+            <label className="label">
+              <span className="label-text font-semibold">Select Problem</span>
+              <span className="label-text-alt text-error">*</span>
+            </label>
+
+            <select
+              className="select w-full"
+              value={roomConfig.problem}
+              onChange={(e) => {
+                const selectedProblem = problems.find((p) => p.title === e.target.value);
+                setRoomConfig({
+                  difficulty: selectedProblem.difficulty,
+                  problem: e.target.value,
+                });
+              }}
+            >
+              <option value="" disabled>
+                Choose a coding problem...
+              </option>
+
+              {problems.map((problem) => (
+                <option key={problem.id} value={problem.title}>
+                  {problem.title} ({problem.difficulty})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* ROOM SUMMARY */}
+          {roomConfig.problem && (
+            <div className="alert alert-success">
+              <Code2Icon className="size-5" />
+              <div>
+                <p className="font-semibold">Room Summary:</p>
+                <p>
+                  Problem: <span className="font-medium">{roomConfig.problem}</span>
+                </p>
+                <p>
+                  Max Participants: <span className="font-medium">2 (1-on-1 session)</span>
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="modal-action">
+          <button className="btn btn-ghost" onClick={onClose}>
+            Cancel
+          </button>
+
+          <button
+            className="btn btn-primary gap-2"
+            onClick={onCreateRoom}
+            disabled={isCreating || !roomConfig.problem}
+          >
+            {isCreating ? (
+              <LoaderIcon className="size-5 animate-spin" />
+            ) : (
+              <PlusIcon className="size-5" />
+            )}
+
+            {isCreating ? "Creating..." : "Create"}
+          </button>
+        </div>
+      </div>
+      <div className="modal-backdrop" onClick={onClose}></div>
+    </div>
+  );
+}
+export default CreateSessionModal;
+
+
+
+============================================================
+
+FILE: frontend\src\components\Navbar.jsx
+
+============================================================
+
+import { Link, useLocation } from "react-router";
+import { BookOpenIcon, LayoutDashboardIcon, SparklesIcon } from "lucide-react";
+import { UserButton } from "@clerk/clerk-react";
+
+function Navbar() {
+  const location = useLocation();
+
+  console.log(location);
+
+  const isActive = (path) => location.pathname === path;
+
+  return (
+    <nav className="bg-base-100/80 backdrop-blur-md border-b border-primary/20 sticky top-0 z-50 shadow-lg">
+      <div className="max-w-7xl mx-auto p-4 flex items-center justify-between">
+        {/* LOGO */}
+        <Link
+          to="/"
+          className="group flex items-center gap-3 hover:scale-105 transition-transform duration-200"
+        >
+          <div className="size-10 rounded-xl bg-gradient-to-r from-primary via-secondary to-accent flex items-center justify-center shadow-lg ">
+            <SparklesIcon className="size-6 text-white" />
+          </div>
+
+          <div className="flex flex-col">
+            <span className="font-black text-xl bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent font-mono tracking-wider">
+              Talent IQ
+            </span>
+            <span className="text-xs text-base-content/60 font-medium -mt-1">Code Together</span>
+          </div>
+        </Link>
+
+        <div className="flex items-center gap-1">
+          {/* PROBLEMS PAGE LINK */}
+          <Link
+            to={"/problems"}
+            className={`px-4 py-2.5 rounded-lg transition-all duration-200 
+              ${
+                isActive("/problems")
+                  ? "bg-primary text-primary-content"
+                  : "hover:bg-base-200 text-base-content/70 hover:text-base-content"
+              }
+              
+              `}
+          >
+            <div className="flex items-center gap-x-2.5">
+              <BookOpenIcon className="size-4" />
+              <span className="font-medium hidden sm:inline">Problems</span>
+            </div>
+          </Link>
+
+          {/* DASHBORD PAGE LINK */}
+          <Link
+            to={"/dashboard"}
+            className={`px-4 py-2.5 rounded-lg transition-all duration-200 
+              ${
+                isActive("/dashboard")
+                  ? "bg-primary text-primary-content"
+                  : "hover:bg-base-200 text-base-content/70 hover:text-base-content"
+              }
+              
+              `}
+          >
+            <div className="flex items-center gap-x-2.5">
+              <LayoutDashboardIcon className="size-4" />
+              <span className="font-medium hidden sm:inline">Dashbord</span>
+            </div>
+          </Link>
+
+          <div className="ml-4 mt-2">
+            <UserButton />
+          </div>
+        </div>
+      </div>
+    </nav>
+  );
+}
+export default Navbar;
+
+
+
+============================================================
+
+FILE: frontend\src\components\OutputPanel.jsx
+
+============================================================
+
+function OutputPanel({ output }) {
+  return (
+    <div className="h-full bg-base-100 flex flex-col">
+      <div className="px-4 py-2 bg-base-200 border-b border-base-300 font-semibold text-sm">
+        Output
+      </div>
+      <div className="flex-1 overflow-auto p-4">
+        {output === null ? (
+          <p className="text-base-content/50 text-sm">Click "Run Code" to see the output here...</p>
+        ) : output.success ? (
+          <pre className="text-sm font-mono text-success whitespace-pre-wrap">{output.output}</pre>
+        ) : (
+          <div>
+            {output.output && (
+              <pre className="text-sm font-mono text-base-content whitespace-pre-wrap mb-2">
+                {output.output}
+              </pre>
+            )}
+            <pre className="text-sm font-mono text-error whitespace-pre-wrap">{output.error}</pre>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+export default OutputPanel;
+
+
+
+============================================================
+
+FILE: frontend\src\components\ProblemDescription.jsx
+
+============================================================
+
+import { getDifficultyBadgeClass } from "../lib/utils";
+function ProblemDescription({ problem, currentProblemId, onProblemChange, allProblems }) {
+  return (
+    <div className="h-full overflow-y-auto bg-base-200">
+      {/* HEADER SECTION */}
+      <div className="p-6 bg-base-100 border-b border-base-300">
+        <div className="flex items-start justify-between mb-3">
+          <h1 className="text-3xl font-bold text-base-content">{problem.title}</h1>
+          <span className={`badge ${getDifficultyBadgeClass(problem.difficulty)}`}>
+            {problem.difficulty}
+          </span>
+        </div>
+        <p className="text-base-content/60">{problem.category}</p>
+
+        {/* Problem selector */}
+        <div className="mt-4">
+          <select
+            className="select select-sm w-full"
+            value={currentProblemId}
+            onChange={(e) => onProblemChange(e.target.value)}
+          >
+            {allProblems.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.title} - {p.difficulty}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="p-6 space-y-6">
+        {/* PROBLEM DESC */}
+        <div className="bg-base-100 rounded-xl shadow-sm p-5 border border-base-300">
+          <h2 className="text-xl font-bold text-base-content">Description</h2>
+
+          <div className="space-y-3 text-base leading-relaxed">
+            <p className="text-base-content/90">{problem.description.text}</p>
+            {problem.description.notes.map((note, idx) => (
+              <p key={idx} className="text-base-content/90">
+                {note}
+              </p>
+            ))}
+          </div>
+        </div>
+
+        {/* EXAMPLES SECTION */}
+        <div className="bg-base-100 rounded-xl shadow-sm p-5 border border-base-300">
+          <h2 className="text-xl font-bold mb-4 text-base-content">Examples</h2>
+          <div className="space-y-4">
+            {problem.examples.map((example, idx) => (
+              <div key={idx}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="badge badge-sm">{idx + 1}</span>
+                  <p className="font-semibold text-base-content">Example {idx + 1}</p>
+                </div>
+                <div className="bg-base-200 rounded-lg p-4 font-mono text-sm space-y-1.5">
+                  <div className="flex gap-2">
+                    <span className="text-primary font-bold min-w-[70px]">Input:</span>
+                    <span>{example.input}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-secondary font-bold min-w-[70px]">Output:</span>
+                    <span>{example.output}</span>
+                  </div>
+                  {example.explanation && (
+                    <div className="pt-2 border-t border-base-300 mt-2">
+                      <span className="text-base-content/60 font-sans text-xs">
+                        <span className="font-semibold">Explanation:</span> {example.explanation}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* CONSTRAINTS */}
+        <div className="bg-base-100 rounded-xl shadow-sm p-5 border border-base-300">
+          <h2 className="text-xl font-bold mb-4 text-base-content">Constraints</h2>
+          <ul className="space-y-2 text-base-content/90">
+            {problem.constraints.map((constraint, idx) => (
+              <li key={idx} className="flex gap-2">
+                <span className="text-primary">â€¢</span>
+                <code className="text-sm">{constraint}</code>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default ProblemDescription;
+
+
+
+============================================================
+
+FILE: frontend\src\components\RecentSessions.jsx
+
+============================================================
+
+import { Code2, Clock, Users, Trophy, Loader } from "lucide-react";
+import { getDifficultyBadgeClass } from "../lib/utils";
+import { formatDistanceToNow } from "date-fns";
+
+function RecentSessions({ sessions, isLoading }) {
+  return (
+    <div className="card bg-base-100 border-2 border-accent/20 hover:border-accent/30 mt-8">
+      <div className="card-body">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-2 bg-gradient-to-br from-accent to-secondary rounded-xl">
+            <Clock className="w-5 h-5 text-white" />
+          </div>
+          <h2 className="text-2xl font-black">Your Past Sessions</h2>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {isLoading ? (
+            <div className="col-span-full flex items-center justify-center py-20">
+              <Loader className="w-10 h-10 animate-spin text-primary" />
+            </div>
+          ) : sessions.length > 0 ? (
+            sessions.map((session) => (
+              <div
+                key={session._id}
+                className={`card relative ${
+                  session.status === "active"
+                    ? "bg-success/10 border-success/30 hover:border-success/60"
+                    : "bg-base-200 border-base-300 hover:border-primary/30"
+                }`}
+              >
+                {session.status === "active" && (
+                  <div className="absolute top-3 right-3">
+                    <div className="badge badge-success gap-1">
+                      <div className="w-1.5 h-1.5 bg-success rounded-full animate-pulse" />
+                      ACTIVE
+                    </div>
+                  </div>
+                )}
+
+                <div className="card-body p-5">
+                  <div className="flex items-start gap-3 mb-4">
+                    <div
+                      className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                        session.status === "active"
+                          ? "bg-gradient-to-br from-success to-success/70"
+                          : "bg-gradient-to-br from-primary to-secondary"
+                      }`}
+                    >
+                      <Code2 className="w-6 h-6 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-bold text-base mb-1 truncate">{session.problem}</h3>
+                      <span
+                        className={`badge badge-sm ${getDifficultyBadgeClass(session.difficulty)}`}
+                      >
+                        {session.difficulty}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 text-sm opacity-80 mb-4">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4" />
+                      <span>
+                        {formatDistanceToNow(new Date(session.createdAt), {
+                          addSuffix: true,
+                        })}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Users className="w-4 h-4" />
+                      <span>
+                        {session.participant ? "2" : "1"} participant
+                        {session.participant ? "s" : ""}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-3 border-t border-base-300">
+                    <span className="text-xs font-semibold opacity-80 uppercase">Completed</span>
+                    <span className="text-xs opacity-40">
+                      {new Date(session.updatedAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="col-span-full text-center py-16">
+              <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-accent/20 to-secondary/20 rounded-3xl flex items-center justify-center">
+                <Trophy className="w-10 h-10 text-accent/50" />
+              </div>
+              <p className="text-lg font-semibold opacity-70 mb-1">No sessions yet</p>
+              <p className="text-sm opacity-50">Start your coding journey today!</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default RecentSessions;
+
+
+
+============================================================
+
+FILE: frontend\src\components\StatsCards.jsx
+
+============================================================
+
+import { TrophyIcon, UsersIcon } from "lucide-react";
+
+function StatsCards({ activeSessionsCount, recentSessionsCount }) {
+  return (
+    <div className="lg:col-span-1 grid grid-cols-1 gap-6">
+      {/* Active Count */}
+      <div className="card bg-base-100 border-2 border-primary/20 hover:border-primary/40">
+        <div className="card-body">
+          <div className="flex items-center justify-between mb-3">
+            <div className="p-3 bg-primary/10 rounded-2xl">
+              <UsersIcon className="w-7 h-7 text-primary" />
+            </div>
+            <div className="badge badge-primary">Live</div>
+          </div>
+          <div className="text-4xl font-black mb-1">{activeSessionsCount}</div>
+          <div className="text-sm opacity-60">Active Sessions</div>
+        </div>
+      </div>
+
+      {/* Recent Count */}
+      <div className="card bg-base-100 border-2 border-secondary/20 hover:border-secondary/40">
+        <div className="card-body">
+          <div className="flex items-center justify-between mb-3">
+            <div className="p-3 bg-secondary/10 rounded-2xl">
+              <TrophyIcon className="w-7 h-7 text-secondary" />
+            </div>
+          </div>
+          <div className="text-4xl font-black mb-1">{recentSessionsCount}</div>
+          <div className="text-sm opacity-60">Total Sessions</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default StatsCards;
+
+
+
+============================================================
+
+FILE: frontend\src\components\VideoCallUI.jsx
+
+============================================================
+
+import {
+  CallControls,
+  CallingState,
+  SpeakerLayout,
+  useCallStateHooks,
+} from "@stream-io/video-react-sdk";
+import { Loader2Icon, MessageSquareIcon, UsersIcon, XIcon } from "lucide-react";
+import { useState } from "react";
+import { useNavigate } from "react-router";
+import { Channel, Chat, MessageInput, MessageList, Thread, Window } from "stream-chat-react";
+
+import "@stream-io/video-react-sdk/dist/css/styles.css";
+import "stream-chat-react/dist/css/v2/index.css";
+
+function VideoCallUI({ chatClient, channel }) {
+  const navigate = useNavigate();
+  const { useCallCallingState, useParticipantCount } = useCallStateHooks();
+  const callingState = useCallCallingState();
+  const participantCount = useParticipantCount();
+  const [isChatOpen, setIsChatOpen] = useState(false);
+
+  if (callingState === CallingState.JOINING) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <Loader2Icon className="w-12 h-12 mx-auto animate-spin text-primary mb-4" />
+          <p className="text-lg">Joining call...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex gap-3 relative str-video">
+      <div className="flex-1 flex flex-col gap-3">
+        {/* Participants count badge and Chat Toggle */}
+        <div className="flex items-center justify-between gap-2 bg-base-100 p-3 rounded-lg shadow">
+          <div className="flex items-center gap-2">
+            <UsersIcon className="w-5 h-5 text-primary" />
+            <span className="font-semibold">
+              {participantCount} {participantCount === 1 ? "participant" : "participants"}
+            </span>
+          </div>
+          {chatClient && channel && (
+            <button
+              onClick={() => setIsChatOpen(!isChatOpen)}
+              className={`btn btn-sm gap-2 ${isChatOpen ? "btn-primary" : "btn-ghost"}`}
+              title={isChatOpen ? "Hide chat" : "Show chat"}
+            >
+              <MessageSquareIcon className="size-4" />
+              Chat
+            </button>
+          )}
+        </div>
+
+        <div className="flex-1 bg-base-300 rounded-lg overflow-hidden relative">
+          <SpeakerLayout />
+        </div>
+
+        <div className="bg-base-100 p-3 rounded-lg shadow flex justify-center">
+          <CallControls onLeave={() => navigate("/dashboard")} />
+        </div>
+      </div>
+
+      {/* CHAT SECTION */}
+
+      {chatClient && channel && (
+        <div
+          className={`flex flex-col rounded-lg shadow overflow-hidden bg-[#272a30] transition-all duration-300 ease-in-out ${
+            isChatOpen ? "w-80 opacity-100" : "w-0 opacity-0"
+          }`}
+        >
+          {isChatOpen && (
+            <>
+              <div className="bg-[#1c1e22] p-3 border-b border-[#3a3d44] flex items-center justify-between">
+                <h3 className="font-semibold text-white">Session Chat</h3>
+                <button
+                  onClick={() => setIsChatOpen(false)}
+                  className="text-gray-400 hover:text-white transition-colors"
+                  title="Close chat"
+                >
+                  <XIcon className="size-5" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-hidden stream-chat-dark">
+                <Chat client={chatClient} theme="str-chat__theme-dark">
+                  <Channel channel={channel}>
+                    <Window>
+                      <MessageList />
+                      <MessageInput />
+                    </Window>
+                    <Thread />
+                  </Channel>
+                </Chat>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+export default VideoCallUI;
+
+
+
+============================================================
+
+FILE: frontend\src\components\WelcomeSection.jsx
+
+============================================================
+
+import { useUser } from "@clerk/clerk-react";
+import { ArrowRightIcon, SparklesIcon, ZapIcon } from "lucide-react";
+
+function WelcomeSection({ onCreateSession }) {
+  const { user } = useUser();
+
+  return (
+    <div className="relative overflow-hidden">
+      <div className="relative max-w-7xl mx-auto px-6 py-16">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+                <SparklesIcon className="w-6 h-6 text-white" />
+              </div>
+              <h1 className="text-5xl font-black bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent">
+                Welcome back, {user?.firstName || "there"}!
+              </h1>
+            </div>
+            <p className="text-xl text-base-content/60 ml-16">
+              Ready to level up your coding skills?
+            </p>
+          </div>
+          <button
+            onClick={onCreateSession}
+            className="group px-8 py-4 bg-gradient-to-r from-primary to-secondary rounded-2xl transition-all duration-200 hover:opacity-90"
+          >
+            <div className="flex items-center gap-3 text-white font-bold text-lg">
+              <ZapIcon className="w-6 h-6" />
+              <span>Create Session</span>
+              <ArrowRightIcon className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default WelcomeSection;
+
+
+
+============================================================
+
+FILE: frontend\src\data\problems.js
+
+============================================================
+
+export const PROBLEMS = {
+  "two-sum": {
+    id: "two-sum",
+    title: "Two Sum",
+    difficulty: "Easy",
+    category: "Array â€¢ Hash Table",
+    description: {
+      text: "Given an array of integers nums and an integer target, return indices of the two numbers in the array such that they add up to target.",
+      notes: [
+        "You may assume that each input would have exactly one solution, and you may not use the same element twice.",
+        "You can return the answer in any order.",
+      ],
+    },
+    examples: [
+      {
+        input: "nums = [2,7,11,15], target = 9",
+        output: "[0,1]",
+        explanation: "Because nums[0] + nums[1] == 9, we return [0, 1].",
+      },
+      {
+        input: "nums = [3,2,4], target = 6",
+        output: "[1,2]",
+      },
+      {
+        input: "nums = [3,3], target = 6",
+        output: "[0,1]",
+      },
+    ],
+    constraints: [
+      "2 â‰¤ nums.length â‰¤ 10â´",
+      "-10â¹ â‰¤ nums[i] â‰¤ 10â¹",
+      "-10â¹ â‰¤ target â‰¤ 10â¹",
+      "Only one valid answer exists",
+    ],
+    starterCode: {
+      javascript: `function twoSum(nums, target) {
+  // Write your solution here
+  
+}
+
+// Test cases
+console.log(twoSum([2, 7, 11, 15], 9)); // Expected: [0, 1]
+console.log(twoSum([3, 2, 4], 6)); // Expected: [1, 2]
+console.log(twoSum([3, 3], 6)); // Expected: [0, 1]`,
+      python: `def twoSum(nums, target):
+    # Write your solution here
+    pass
+
+# Test cases
+print(twoSum([2, 7, 11, 15], 9))  # Expected: [0, 1]
+print(twoSum([3, 2, 4], 6))  # Expected: [1, 2]
+print(twoSum([3, 3], 6))  # Expected: [0, 1]`,
+      java: `import java.util.*;
+
+class Solution {
+    public static int[] twoSum(int[] nums, int target) {
+        // Write your solution here
+        
+        return new int[0];
+    }
+    
+    public static void main(String[] args) {
+        System.out.println(Arrays.toString(twoSum(new int[]{2, 7, 11, 15}, 9))); // Expected: [0, 1]
+        System.out.println(Arrays.toString(twoSum(new int[]{3, 2, 4}, 6))); // Expected: [1, 2]
+        System.out.println(Arrays.toString(twoSum(new int[]{3, 3}, 6))); // Expected: [0, 1]
+    }
+}`,
+    },
+    expectedOutput: {
+      javascript: "[0,1]\n[1,2]\n[0,1]",
+      python: "[0, 1]\n[1, 2]\n[0, 1]",
+      java: "[0, 1]\n[1, 2]\n[0, 1]",
+    },
+  },
+
+  "reverse-string": {
+    id: "reverse-string",
+    title: "Reverse String",
+    difficulty: "Easy",
+    category: "String â€¢ Two Pointers",
+    description: {
+      text: "Write a function that reverses a string. The input string is given as an array of characters s.",
+      notes: ["You must do this by modifying the input array in-place with O(1) extra memory."],
+    },
+    examples: [
+      {
+        input: 's = ["h","e","l","l","o"]',
+        output: '["o","l","l","e","h"]',
+      },
+      {
+        input: 's = ["H","a","n","n","a","h"]',
+        output: '["h","a","n","n","a","H"]',
+      },
+    ],
+    constraints: ["1 â‰¤ s.length â‰¤ 10âµ", "s[i] is a printable ascii character"],
+    starterCode: {
+      javascript: `function reverseString(s) {
+  // Write your solution here
+  
+}
+
+// Test cases
+let test1 = ["h","e","l","l","o"];
+reverseString(test1);
+console.log(test1); // Expected: ["o","l","l","e","h"]
+
+let test2 = ["H","a","n","n","a","h"];
+reverseString(test2);
+console.log(test2); // Expected: ["h","a","n","n","a","H"]`,
+      python: `def reverseString(s):
+    # Write your solution here
+    pass
+
+# Test cases
+test1 = ["h","e","l","l","o"]
+reverseString(test1)
+print(test1)  # Expected: ["o","l","l","e","h"]
+
+test2 = ["H","a","n","n","a","h"]
+reverseString(test2)
+print(test2)  # Expected: ["h","a","n","n","a","H"]`,
+      java: `import java.util.*;
+
+class Solution {
+    public static void reverseString(char[] s) {
+        // Write your solution here
+        
+    }
+    
+    public static void main(String[] args) {
+        char[] test1 = {'h','e','l','l','o'};
+        reverseString(test1);
+        System.out.println(Arrays.toString(test1)); // Expected: [o, l, l, e, h]
+        
+        char[] test2 = {'H','a','n','n','a','h'};
+        reverseString(test2);
+        System.out.println(Arrays.toString(test2)); // Expected: [h, a, n, n, a, H]
+    }
+}`,
+    },
+    expectedOutput: {
+      javascript: '["o","l","l","e","h"]\n["h","a","n","n","a","H"]',
+      python: "['o', 'l', 'l', 'e', 'h']\n['h', 'a', 'n', 'n', 'a', 'H']",
+      java: "[o, l, l, e, h]\n[h, a, n, n, a, H]",
+    },
+  },
+
+  "valid-palindrome": {
+    id: "valid-palindrome",
+    title: "Valid Palindrome",
+    difficulty: "Easy",
+    category: "String â€¢ Two Pointers",
+    description: {
+      text: "A phrase is a palindrome if, after converting all uppercase letters into lowercase letters and removing all non-alphanumeric characters, it reads the same forward and backward. Alphanumeric characters include letters and numbers.",
+      notes: ["Given a string s, return true if it is a palindrome, or false otherwise."],
+    },
+    examples: [
+      {
+        input: 's = "A man, a plan, a canal: Panama"',
+        output: "true",
+        explanation: '"amanaplanacanalpanama" is a palindrome.',
+      },
+      {
+        input: 's = "race a car"',
+        output: "false",
+        explanation: '"raceacar" is not a palindrome.',
+      },
+      {
+        input: 's = " "',
+        output: "true",
+        explanation:
+          's is an empty string "" after removing non-alphanumeric characters. Since an empty string reads the same forward and backward, it is a palindrome.',
+      },
+    ],
+    constraints: ["1 â‰¤ s.length â‰¤ 2 * 10âµ", "s consists only of printable ASCII characters"],
+    starterCode: {
+      javascript: `function isPalindrome(s) {
+  // Write your solution here
+  
+}
+
+// Test cases
+console.log(isPalindrome("A man, a plan, a canal: Panama")); // Expected: true
+console.log(isPalindrome("race a car")); // Expected: false
+console.log(isPalindrome(" ")); // Expected: true`,
+      python: `def isPalindrome(s):
+    # Write your solution here
+    pass
+
+# Test cases
+print(isPalindrome("A man, a plan, a canal: Panama"))  # Expected: True
+print(isPalindrome("race a car"))  # Expected: False
+print(isPalindrome(" "))  # Expected: True`,
+      java: `class Solution {
+    public static boolean isPalindrome(String s) {
+        // Write your solution here
+        
+        return false;
+    }
+    
+    public static void main(String[] args) {
+        System.out.println(isPalindrome("A man, a plan, a canal: Panama")); // Expected: true
+        System.out.println(isPalindrome("race a car")); // Expected: false
+        System.out.println(isPalindrome(" ")); // Expected: true
+    }
+}`,
+    },
+    expectedOutput: {
+      javascript: "true\nfalse\ntrue",
+      python: "True\nFalse\nTrue",
+      java: "true\nfalse\ntrue",
+    },
+  },
+
+  "maximum-subarray": {
+    id: "maximum-subarray",
+    title: "Maximum Subarray",
+    difficulty: "Medium",
+    category: "Array â€¢ Dynamic Programming",
+    description: {
+      text: "Given an integer array nums, find the subarray with the largest sum, and return its sum.",
+      notes: [],
+    },
+    examples: [
+      {
+        input: "nums = [-2,1,-3,4,-1,2,1,-5,4]",
+        output: "6",
+        explanation: "The subarray [4,-1,2,1] has the largest sum 6.",
+      },
+      {
+        input: "nums = [1]",
+        output: "1",
+        explanation: "The subarray [1] has the largest sum 1.",
+      },
+      {
+        input: "nums = [5,4,-1,7,8]",
+        output: "23",
+        explanation: "The subarray [5,4,-1,7,8] has the largest sum 23.",
+      },
+    ],
+    constraints: ["1 â‰¤ nums.length â‰¤ 10âµ", "-10â´ â‰¤ nums[i] â‰¤ 10â´"],
+    starterCode: {
+      javascript: `function maxSubArray(nums) {
+  // Write your solution here
+  
+}
+
+// Test cases
+console.log(maxSubArray([-2,1,-3,4,-1,2,1,-5,4])); // Expected: 6
+console.log(maxSubArray([1])); // Expected: 1
+console.log(maxSubArray([5,4,-1,7,8])); // Expected: 23`,
+      python: `def maxSubArray(nums):
+    # Write your solution here
+    pass
+
+# Test cases
+print(maxSubArray([-2,1,-3,4,-1,2,1,-5,4]))  # Expected: 6
+print(maxSubArray([1]))  # Expected: 1
+print(maxSubArray([5,4,-1,7,8]))  # Expected: 23`,
+      java: `class Solution {
+    public static int maxSubArray(int[] nums) {
+        // Write your solution here
+        
+        return 0;
+    }
+    
+    public static void main(String[] args) {
+        System.out.println(maxSubArray(new int[]{-2,1,-3,4,-1,2,1,-5,4})); // Expected: 6
+        System.out.println(maxSubArray(new int[]{1})); // Expected: 1
+        System.out.println(maxSubArray(new int[]{5,4,-1,7,8})); // Expected: 23
+    }
+}`,
+    },
+    expectedOutput: {
+      javascript: "6\n1\n23",
+      python: "6\n1\n23",
+      java: "6\n1\n23",
+    },
+  },
+
+  "container-with-most-water": {
+    id: "container-with-most-water",
+    title: "Container With Most Water",
+    difficulty: "Medium",
+    category: "Array â€¢ Two Pointers",
+    description: {
+      text: "You are given an integer array height of length n. There are n vertical lines drawn such that the two endpoints of the ith line are (i, 0) and (i, height[i]).",
+      notes: [
+        "Find two lines that together with the x-axis form a container, such that the container contains the most water.",
+        "Return the maximum amount of water a container can store.",
+        "Notice that you may not slant the container.",
+      ],
+    },
+    examples: [
+      {
+        input: "height = [1,8,6,2,5,4,8,3,7]",
+        output: "49",
+        explanation:
+          "The vertical lines are represented by array [1,8,6,2,5,4,8,3,7]. In this case, the max area of water the container can contain is 49.",
+      },
+      {
+        input: "height = [1,1]",
+        output: "1",
+      },
+    ],
+    constraints: ["n == height.length", "2 â‰¤ n â‰¤ 10âµ", "0 â‰¤ height[i] â‰¤ 10â´"],
+    starterCode: {
+      javascript: `function maxArea(height) {
+  // Write your solution here
+  
+}
+
+// Test cases
+console.log(maxArea([1,8,6,2,5,4,8,3,7])); // Expected: 49
+console.log(maxArea([1,1])); // Expected: 1`,
+      python: `def maxArea(height):
+    # Write your solution here
+    pass
+
+# Test cases
+print(maxArea([1,8,6,2,5,4,8,3,7]))  # Expected: 49
+print(maxArea([1,1]))  # Expected: 1`,
+      java: `class Solution {
+    public static int maxArea(int[] height) {
+        // Write your solution here
+        
+        return 0;
+    }
+    
+    public static void main(String[] args) {
+        System.out.println(maxArea(new int[]{1,8,6,2,5,4,8,3,7})); // Expected: 49
+        System.out.println(maxArea(new int[]{1,1})); // Expected: 1
+    }
+}`,
+    },
+    expectedOutput: {
+      javascript: "49\n1",
+      python: "49\n1",
+      java: "49\n1",
+    },
+  },
+};
+
+export const LANGUAGE_CONFIG = {
+  javascript: {
+    name: "JavaScript",
+    icon: "/javascript.png",
+    monacoLang: "javascript",
+  },
+  python: {
+    name: "Python",
+    icon: "/python.png",
+    monacoLang: "python",
+  },
+  java: {
+    name: "Java",
+    icon: "/java.png",
+    monacoLang: "java",
+  },
+};
+
+
+
+============================================================
+
+FILE: frontend\src\hooks\useSessions.js
+
+============================================================
+
+import { useMutation, useQuery } from "@tanstack/react-query";
+import toast from "react-hot-toast";
+import { sessionApi } from "../api/sessions";
+
+export const useCreateSession = () => {
+  const result = useMutation({
+    mutationKey: ["createSession"],
+    mutationFn: sessionApi.createSession,
+    onSuccess: () => toast.success("Session created successfully!"),
+    onError: (error) => toast.error(error.response?.data?.message || "Failed to create room"),
+  });
+
+  return result;
+};
+
+export const useActiveSessions = () => {
+  const result = useQuery({
+    queryKey: ["activeSessions"],
+    queryFn: sessionApi.getActiveSessions,
+  });
+
+  return result;
+};
+
+export const useMyRecentSessions = () => {
+  const result = useQuery({
+    queryKey: ["myRecentSessions"],
+    queryFn: sessionApi.getMyRecentSessions,
+  });
+
+  return result;
+};
+
+export const useSessionById = (id) => {
+  const result = useQuery({
+    queryKey: ["session", id],
+    queryFn: () => sessionApi.getSessionById(id),
+    enabled: !!id,
+    refetchInterval: 5000, // refetch every 5 seconds to detect session status changes
+  });
+
+  return result;
+};
+
+export const useJoinSession = () => {
+  const result = useMutation({
+    mutationKey: ["joinSession"],
+    mutationFn: sessionApi.joinSession,
+    onSuccess: () => toast.success("Joined session successfully!"),
+    onError: (error) => toast.error(error.response?.data?.message || "Failed to join session"),
+  });
+
+  return result;
+};
+
+export const useEndSession = () => {
+  const result = useMutation({
+    mutationKey: ["endSession"],
+    mutationFn: sessionApi.endSession,
+    onSuccess: () => toast.success("Session ended successfully!"),
+    onError: (error) => toast.error(error.response?.data?.message || "Failed to end session"),
+  });
+
+  return result;
+};
+
+
+
+============================================================
+
+FILE: frontend\src\hooks\useStreamClient.js
+
+============================================================
+
+import { useState, useEffect } from "react";
+import { StreamChat } from "stream-chat";
+import toast from "react-hot-toast";
+import { initializeStreamClient, disconnectStreamClient } from "../lib/stream";
+import { sessionApi } from "../api/sessions";
+
+function useStreamClient(session, loadingSession, isHost, isParticipant) {
+  const [streamClient, setStreamClient] = useState(null);
+  const [call, setCall] = useState(null);
+  const [chatClient, setChatClient] = useState(null);
+  const [channel, setChannel] = useState(null);
+  const [isInitializingCall, setIsInitializingCall] = useState(true);
+
+  useEffect(() => {
+    let videoCall = null;
+    let chatClientInstance = null;
+
+    const initCall = async () => {
+      if (!session?.callId) return;
+      if (!isHost && !isParticipant) return;
+      if (session.status === "completed") return;
+
+      try {
+        const { token, userId, userName, userImage } = await sessionApi.getStreamToken();
+
+        const client = await initializeStreamClient(
+          {
+            id: userId,
+            name: userName,
+            image: userImage,
+          },
+          token
+        );
+
+        setStreamClient(client);
+
+        videoCall = client.call("default", session.callId);
+        await videoCall.join({ create: true });
+        setCall(videoCall);
+
+        const apiKey = import.meta.env.VITE_STREAM_API_KEY;
+        chatClientInstance = StreamChat.getInstance(apiKey);
+
+        await chatClientInstance.connectUser(
+          {
+            id: userId,
+            name: userName,
+            image: userImage,
+          },
+          token
+        );
+        setChatClient(chatClientInstance);
+
+        const chatChannel = chatClientInstance.channel("messaging", session.callId);
+        await chatChannel.watch();
+        setChannel(chatChannel);
+      } catch (error) {
+        toast.error("Failed to join video call");
+        console.error("Error init call", error);
+      } finally {
+        setIsInitializingCall(false);
+      }
+    };
+
+    if (session && !loadingSession) initCall();
+
+    // cleanup - performance reasons
+    return () => {
+      // iife
+      (async () => {
+        try {
+          if (videoCall) await videoCall.leave();
+          if (chatClientInstance) await chatClientInstance.disconnectUser();
+          await disconnectStreamClient();
+        } catch (error) {
+          console.error("Cleanup error:", error);
+        }
+      })();
+    };
+  }, [session, loadingSession, isHost, isParticipant]);
+
+  return {
+    streamClient,
+    call,
+    chatClient,
+    channel,
+    isInitializingCall,
+  };
+}
+
+export default useStreamClient;
+
+
+
+============================================================
+
+FILE: frontend\src\lib\axios.js
+
+============================================================
+
+import axios from "axios";
+
+const axiosInstance = axios.create({
+  baseURL: import.meta.env.VITE_API_URL,
+  withCredentials: true, // by adding this field browser will send the cookies to server automatically, on every single req
+});
+
+export default axiosInstance;
+
+
+
+============================================================
+
+FILE: frontend\src\lib\piston.js
+
+============================================================
+
+// Piston API is a service for code execution
+
+const PISTON_API = "https://emkc.org/api/v2/piston";
+
+const LANGUAGE_VERSIONS = {
+  javascript: { language: "javascript", version: "18.15.0" },
+  python: { language: "python", version: "3.10.0" },
+  java: { language: "java", version: "15.0.2" },
+};
+
+/**
+ * @param {string} language - programming language
+ * @param {string} code - source code to executed
+ * @returns {Promise<{success:boolean, output?:string, error?: string}>}
+ */
+export async function executeCode(language, code) {
+  try {
+    const languageConfig = LANGUAGE_VERSIONS[language];
+
+    if (!languageConfig) {
+      return {
+        success: false,
+        error: `Unsupported language: ${language}`,
+      };
+    }
+
+    const response = await fetch(`${PISTON_API}/execute`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        language: languageConfig.language,
+        version: languageConfig.version,
+        files: [
+          {
+            name: `main.${getFileExtension(language)}`,
+            content: code,
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: `HTTP error! status: ${response.status}`,
+      };
+    }
+
+    const data = await response.json();
+
+    const output = data.run.output || "";
+    const stderr = data.run.stderr || "";
+
+    if (stderr) {
+      return {
+        success: false,
+        output: output,
+        error: stderr,
+      };
+    }
+
+    return {
+      success: true,
+      output: output || "No output",
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: `Failed to execute code: ${error.message}`,
+    };
+  }
+}
+
+function getFileExtension(language) {
+  const extensions = {
+    javascript: "js",
+    python: "py",
+    java: "java",
+  };
+
+  return extensions[language] || "txt";
+}
+
+
+
+============================================================
+
+FILE: frontend\src\lib\stream.js
+
+============================================================
+
+import { StreamVideoClient } from "@stream-io/video-react-sdk";
+
+const apiKey = import.meta.env.VITE_STREAM_API_KEY;
+
+let client = null;
+
+export const initializeStreamClient = async (user, token) => {
+  // if client exists with same user instead of creating again return it
+
+  if (client && client?.user?.id === user.id) return client;
+
+  if (client) {
+    await disconnectStreamClient();
+  }
+
+  if (!apiKey) throw new Error("Stream API key is not provided.");
+
+  client = new StreamVideoClient({
+    apiKey,
+    user,
+    token,
+  });
+
+  return client;
+};
+
+export const disconnectStreamClient = async () => {
+  if (client) {
+    try {
+      await client.disconnectUser();
+      client = null;
+    } catch (error) {
+      console.error("Error disconnecting Stream client:", error);
+    }
+  }
+};
+
+
+
+============================================================
+
+FILE: frontend\src\lib\utils.js
+
+============================================================
+
+export const getDifficultyBadgeClass = (difficulty) => {
+  switch (difficulty?.toLowerCase()) {
+    case "easy":
+      return "badge-success";
+    case "medium":
+      return "badge-warning";
+    case "hard":
+      return "badge-error";
+    default:
+      return "badge-ghost";
+  }
+};
+
+
+
+============================================================
+
+FILE: frontend\src\pages\DashboardPage.jsx
+
+============================================================
+
+import { useNavigate } from "react-router";
+import { useUser } from "@clerk/clerk-react";
+import { useState } from "react";
+import { useActiveSessions, useCreateSession, useMyRecentSessions } from "../hooks/useSessions";
+
+import Navbar from "../components/Navbar";
+import WelcomeSection from "../components/WelcomeSection";
+import StatsCards from "../components/StatsCards";
+import ActiveSessions from "../components/ActiveSessions";
+import RecentSessions from "../components/RecentSessions";
+import CreateSessionModal from "../components/CreateSessionModal";
+
+function DashboardPage() {
+  const navigate = useNavigate();
+  const { user } = useUser();
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [roomConfig, setRoomConfig] = useState({ problem: "", difficulty: "" });
+
+  const createSessionMutation = useCreateSession();
+
+  const { data: activeSessionsData, isLoading: loadingActiveSessions } = useActiveSessions();
+  const { data: recentSessionsData, isLoading: loadingRecentSessions } = useMyRecentSessions();
+
+  const handleCreateRoom = () => {
+    if (!roomConfig.problem || !roomConfig.difficulty) return;
+
+    createSessionMutation.mutate(
+      {
+        problem: roomConfig.problem,
+        difficulty: roomConfig.difficulty.toLowerCase(),
+      },
+      {
+        onSuccess: (data) => {
+          setShowCreateModal(false);
+          navigate(`/session/${data.session._id}`);
+        },
+      }
+    );
+  };
+
+  const activeSessions = activeSessionsData?.sessions || [];
+  const recentSessions = recentSessionsData?.sessions || [];
+
+  const isUserInSession = (session) => {
+    if (!user.id) return false;
+
+    return session.host?.clerkId === user.id || session.participant?.clerkId === user.id;
+  };
+
+  return (
+    <>
+      <div className="min-h-screen bg-base-300">
+        <Navbar />
+        <WelcomeSection onCreateSession={() => setShowCreateModal(true)} />
+
+        {/* Grid layout */}
+        <div className="container mx-auto px-6 pb-16">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <StatsCards
+              activeSessionsCount={activeSessions.length}
+              recentSessionsCount={recentSessions.length}
+            />
+            <ActiveSessions
+              sessions={activeSessions}
+              isLoading={loadingActiveSessions}
+              isUserInSession={isUserInSession}
+            />
+          </div>
+
+          <RecentSessions sessions={recentSessions} isLoading={loadingRecentSessions} />
+        </div>
+      </div>
+
+      <CreateSessionModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        roomConfig={roomConfig}
+        setRoomConfig={setRoomConfig}
+        onCreateRoom={handleCreateRoom}
+        isCreating={createSessionMutation.isPending}
+      />
+    </>
+  );
+}
+
+export default DashboardPage;
+
+
+
+============================================================
+
+FILE: frontend\src\pages\HomePage.jsx
+
+============================================================
+
+import { Link } from "react-router";
+import {
+  ArrowRightIcon,
+  CheckIcon,
+  Code2Icon,
+  SparklesIcon,
+  UsersIcon,
+  VideoIcon,
+  ZapIcon,
+} from "lucide-react";
+import { SignInButton } from "@clerk/clerk-react";
+
+function HomePage() {
+  return (
+    <div className="bg-gradient-to-br from-base-100 via-base-200 to-base-300">
+      {/* NAVBAR */}
+      <nav className="bg-base-100/80 backdrop-blur-md border-b border-primary/20 sticky top-0 z-50 shadow-lg">
+        <div className="max-w-7xl mx-auto p-4 flex items-center justify-between">
+          {/* LOGO */}
+          <Link
+            to={"/"}
+            className="flex items-center gap-3 hover:scale-105 transition-transform duration-200"
+          >
+            <div className="size-10 rounded-xl bg-gradient-to-br from-primary via-secondary to-accent flex items-center justify-center shadow-lg">
+              <SparklesIcon className="size-6 text-white" />
+            </div>
+
+            <div className="flex flex-col">
+              <span className="font-black text-xl bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent font-mono tracking-wider">
+                Talent IQ
+              </span>
+              <span className="text-xs text-base-content/60 font-medium -mt-1">Code Together</span>
+            </div>
+          </Link>
+
+          {/* AUTH BTN */}
+          <SignInButton mode="modal">
+            <button className="group px-6 py-3 bg-gradient-to-r from-primary to-secondary rounded-xl text-white font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 flex items-center gap-2">
+              <span>Get Started</span>
+              <ArrowRightIcon className="size-4 group-hover:translate-x-0.5 transition-transform" />
+            </button>
+          </SignInButton>
+        </div>
+      </nav>
+
+      {/* HERO SECTION */}
+      <div className="max-w-7xl mx-auto px-4 py-20">
+        <div className="grid lg:grid-cols-2 gap-12 items-center">
+          {/* LEFT CONTENT */}
+          <div className="space-y-8">
+            <div className="badge badge-primary badge-lg">
+              <ZapIcon className="size-4" />
+              Real-time Collaboration
+            </div>
+
+            <h1 className="text-5xl lg:text-7xl font-black leading-tight">
+              <span className="bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent">
+                Code Together,
+              </span>
+              <br />
+              <span className="text-base-content">Learn Together</span>
+            </h1>
+
+            <p className="text-xl text-base-content/70 leading-relaxed max-w-xl">
+              The ultimate platform for collaborative coding interviews and pair programming.
+              Connect face-to-face, code in real-time, and ace your technical interviews.
+            </p>
+
+            {/* FEATURE PILLS */}
+            <div className="flex flex-wrap gap-3">
+              <div className="badge badge-lg badge-outline">
+                <CheckIcon className="size-4 text-success" />
+                Live Video Chat
+              </div>
+              <div className="badge badge-lg badge-outline">
+                <CheckIcon className="size-4 text-success" />
+                Code Editor
+              </div>
+              <div className="badge badge-lg badge-outline">
+                <CheckIcon className="size-4 text-success" />
+                Multi-Language
+              </div>
+            </div>
+
+            {/* CTA Buttons */}
+            <div className="flex flex-wrap gap-4">
+              <SignInButton mode="modal">
+                <button className="btn btn-primary btn-lg">
+                  Start Coding Now
+                  <ArrowRightIcon className="size-5" />
+                </button>
+              </SignInButton>
+
+              <button className="btn btn-outline btn-lg">
+                <VideoIcon className="size-5" />
+                Watch Demo
+              </button>
+            </div>
+
+            {/* STATS */}
+            <div className="stats stats-vertical lg:stats-horizontal bg-base-100 shadow-lg">
+              <div className="stat">
+                <div className="stat-value text-primary">10K+</div>
+                <div className="stat-title">Active Users</div>
+              </div>
+              <div className="stat">
+                <div className="stat-value text-secondary">50K+</div>
+                <div className="stat-title">Sessions</div>
+              </div>
+              <div className="stat">
+                <div className="stat-value text-accent">99.9%</div>
+                <div className="stat-title">Uptime</div>
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT IMAGE */}
+          <img
+            src="/hero.png"
+            alt="CodeCollab Platform"
+            className="w-full h-auto rounded-3xl shadow-2xl border-4 border-base-100 hover:scale-105 transition-transform duration-500"
+          />
+        </div>
+      </div>
+
+      {/* FEATURES SECTION */}
+      <div className="max-w-7xl mx-auto px-4 py-20">
+        <div className="text-center mb-16">
+          <h2 className="text-4xl font-bold mb-4">
+            Everything You Need to <span className="text-primary font-mono">Succeed</span>
+          </h2>
+          <p className="text-lg text-base-content/70 max-w-2xl mx-auto">
+            Powerful features designed to make your coding interviews seamless and productive
+          </p>
+        </div>
+
+        {/* FEATURES GRID */}
+        <div className="grid md:grid-cols-3 gap-8">
+          {/* Feature 1 */}
+          <div className="card bg-base-100 shadow-xl">
+            <div className="card-body items-center text-center">
+              <div className="size-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-4">
+                <VideoIcon className="size-8 text-primary" />
+              </div>
+              <h3 className="card-title">HD Video Call</h3>
+              <p className="text-base-content/70">
+                Crystal clear video and audio for seamless communication during interviews
+              </p>
+            </div>
+          </div>
+
+          {/* Feature 2 */}
+          <div className="card bg-base-100 shadow-xl">
+            <div className="card-body items-center text-center">
+              <div className="size-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-4">
+                <Code2Icon className="size-8 text-primary" />
+              </div>
+              <h3 className="card-title">Live Code Editor</h3>
+              <p className="text-base-content/70">
+                Collaborate in real-time with syntax highlighting and multiple language support
+              </p>
+            </div>
+          </div>
+
+          {/* Feature 3 */}
+          <div className="card bg-base-100 shadow-xl">
+            <div className="card-body items-center text-center">
+              <div className="size-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-4">
+                <UsersIcon className="size-8 text-primary" />
+              </div>
+              <h3 className="card-title">Easy Collaboration</h3>
+              <p className="text-base-content/70">
+                Share your screen, discuss solutions, and learn from each other in real-time
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+export default HomePage;
+
+
+
+============================================================
+
+FILE: frontend\src\pages\ProblemPage.jsx
+
+============================================================
+
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router";
+import { PROBLEMS } from "../data/problems";
+import Navbar from "../components/Navbar";
+
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import ProblemDescription from "../components/ProblemDescription";
+import OutputPanel from "../components/OutputPanel";
+import CodeEditorPanel from "../components/CodeEditorPanel";
+import { executeCode } from "../lib/piston";
+
+import toast from "react-hot-toast";
+import confetti from "canvas-confetti";
+
+function ProblemPage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+
+  const [currentProblemId, setCurrentProblemId] = useState("two-sum");
+  const [selectedLanguage, setSelectedLanguage] = useState("javascript");
+  const [code, setCode] = useState(PROBLEMS[currentProblemId].starterCode.javascript);
+  const [output, setOutput] = useState(null);
+  const [isRunning, setIsRunning] = useState(false);
+
+  const currentProblem = PROBLEMS[currentProblemId];
+
+  // update problem when URL param changes
+  useEffect(() => {
+    if (id && PROBLEMS[id]) {
+      setCurrentProblemId(id);
+      setCode(PROBLEMS[id].starterCode[selectedLanguage]);
+      setOutput(null);
+    }
+  }, [id, selectedLanguage]);
+
+  const handleLanguageChange = (e) => {
+    const newLang = e.target.value;
+    setSelectedLanguage(newLang);
+    setCode(currentProblem.starterCode[newLang]);
+    setOutput(null);
+  };
+
+  const handleProblemChange = (newProblemId) => navigate(`/problem/${newProblemId}`);
+
+  const triggerConfetti = () => {
+    confetti({
+      particleCount: 80,
+      spread: 250,
+      origin: { x: 0.2, y: 0.6 },
+    });
+
+    confetti({
+      particleCount: 80,
+      spread: 250,
+      origin: { x: 0.8, y: 0.6 },
+    });
+  };
+
+  const normalizeOutput = (output) => {
+    // normalize output for comparison (trim whitespace, handle different spacing)
+    return output
+      .trim()
+      .split("\n")
+      .map((line) =>
+        line
+          .trim()
+          // remove spaces after [ and before ]
+          .replace(/\[\s+/g, "[")
+          .replace(/\s+\]/g, "]")
+          // normalize spaces around commas to single space after comma
+          .replace(/\s*,\s*/g, ",")
+      )
+      .filter((line) => line.length > 0)
+      .join("\n");
+  };
+
+  const checkIfTestsPassed = (actualOutput, expectedOutput) => {
+    const normalizedActual = normalizeOutput(actualOutput);
+    const normalizedExpected = normalizeOutput(expectedOutput);
+
+    return normalizedActual == normalizedExpected;
+  };
+
+  const handleRunCode = async () => {
+    setIsRunning(true);
+    setOutput(null);
+
+    const result = await executeCode(selectedLanguage, code);
+    setOutput(result);
+    setIsRunning(false);
+
+    // check if code executed successfully and matches expected output
+
+    if (result.success) {
+      const expectedOutput = currentProblem.expectedOutput[selectedLanguage];
+      const testsPassed = checkIfTestsPassed(result.output, expectedOutput);
+
+      if (testsPassed) {
+        triggerConfetti();
+        toast.success("All tests passed! Great job!");
+      } else {
+        toast.error("Tests failed. Check your output!");
+      }
+    } else {
+      toast.error("Code execution failed!");
+    }
+  };
+
+  return (
+    <div className="h-screen bg-base-100 flex flex-col">
+      <Navbar />
+
+      <div className="flex-1">
+        <PanelGroup direction="horizontal">
+          {/* left panel- problem desc */}
+          <Panel defaultSize={40} minSize={30}>
+            <ProblemDescription
+              problem={currentProblem}
+              currentProblemId={currentProblemId}
+              onProblemChange={handleProblemChange}
+              allProblems={Object.values(PROBLEMS)}
+            />
+          </Panel>
+
+          <PanelResizeHandle className="w-2 bg-base-300 hover:bg-primary transition-colors cursor-col-resize" />
+
+          {/* right panel- code editor & output */}
+          <Panel defaultSize={60} minSize={30}>
+            <PanelGroup direction="vertical">
+              {/* Top panel - Code editor */}
+              <Panel defaultSize={70} minSize={30}>
+                <CodeEditorPanel
+                  selectedLanguage={selectedLanguage}
+                  code={code}
+                  isRunning={isRunning}
+                  onLanguageChange={handleLanguageChange}
+                  onCodeChange={setCode}
+                  onRunCode={handleRunCode}
+                />
+              </Panel>
+
+              <PanelResizeHandle className="h-2 bg-base-300 hover:bg-primary transition-colors cursor-row-resize" />
+
+              {/* Bottom panel - Output Panel*/}
+
+              <Panel defaultSize={30} minSize={30}>
+                <OutputPanel output={output} />
+              </Panel>
+            </PanelGroup>
+          </Panel>
+        </PanelGroup>
+      </div>
+    </div>
+  );
+}
+
+export default ProblemPage;
+
+
+
+============================================================
+
+FILE: frontend\src\pages\ProblemsPage.jsx
+
+============================================================
+
+import { Link } from "react-router";
+import Navbar from "../components/Navbar";
+
+import { PROBLEMS } from "../data/problems";
+import { ChevronRightIcon, Code2Icon } from "lucide-react";
+import { getDifficultyBadgeClass } from "../lib/utils";
+
+function ProblemsPage() {
+  const problems = Object.values(PROBLEMS);
+
+  const easyProblemsCount = problems.filter((p) => p.difficulty === "Easy").length;
+  const mediumProblemsCount = problems.filter((p) => p.difficulty === "Medium").length;
+  const hardProblemsCount = problems.filter((p) => p.difficulty === "Hard").length;
+
+  return (
+    <div className="min-h-screen bg-base-200">
+      <Navbar />
+
+      <div className="max-w-6xl mx-auto px-4 py-12">
+        {/* HEADER */}
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold mb-2">Practice Problems</h1>
+          <p className="text-base-content/70">
+            Sharpen your coding skills with these curated problems
+          </p>
+        </div>
+
+        {/* PROBLEMS LIST */}
+        <div className="space-y-4">
+          {problems.map((problem) => (
+            <Link
+              key={problem.id}
+              to={`/problem/${problem.id}`}
+              className="card bg-base-100 hover:scale-[1.01] transition-transform"
+            >
+              <div className="card-body">
+                <div className="flex items-center justify-between gap-4">
+                  {/* LEFT SIDE */}
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="size-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Code2Icon className="size-6 text-primary" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h2 className="text-xl font-bold">{problem.title}</h2>
+                          <span className={`badge ${getDifficultyBadgeClass(problem.difficulty)}`}>
+                            {problem.difficulty}
+                          </span>
+                        </div>
+                        <p className="text-sm text-base-content/60"> {problem.category}</p>
+                      </div>
+                    </div>
+                    <p className="text-base-content/80 mb-3">{problem.description.text}</p>
+                  </div>
+                  {/* RIGHT SIDE */}
+
+                  <div className="flex items-center gap-2 text-primary">
+                    <span className="font-medium">Solve</span>
+                    <ChevronRightIcon className="size-5" />
+                  </div>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+
+        {/* STATS FOOTER */}
+        <div className="mt-12 card bg-base-100 shadow-lg">
+          <div className="card-body">
+            <div className="stats stats-vertical lg:stats-horizontal">
+              <div className="stat">
+                <div className="stat-title">Total Problems</div>
+                <div className="stat-value text-primary">{problems.length}</div>
+              </div>
+
+              <div className="stat">
+                <div className="stat-title">Easy</div>
+                <div className="stat-value text-success">{easyProblemsCount}</div>
+              </div>
+              <div className="stat">
+                <div className="stat-title">Medium</div>
+                <div className="stat-value text-warning">{mediumProblemsCount}</div>
+              </div>
+              <div className="stat">
+                <div className="stat-title">Hard</div>
+                <div className="stat-value text-error">{hardProblemsCount}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+export default ProblemsPage;
+
+
+
+============================================================
+
+FILE: frontend\src\pages\SessionPage.jsx
+
+============================================================
+
+import { useUser } from "@clerk/clerk-react";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router";
+import { useEndSession, useJoinSession, useSessionById } from "../hooks/useSessions";
+import { PROBLEMS } from "../data/problems";
+import { executeCode } from "../lib/piston";
+import Navbar from "../components/Navbar";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import { getDifficultyBadgeClass } from "../lib/utils";
+import { Loader2Icon, LogOutIcon, PhoneOffIcon } from "lucide-react";
+import CodeEditorPanel from "../components/CodeEditorPanel";
+import OutputPanel from "../components/OutputPanel";
+
+import useStreamClient from "../hooks/useStreamClient";
+import { StreamCall, StreamVideo } from "@stream-io/video-react-sdk";
+import VideoCallUI from "../components/VideoCallUI";
+
+function SessionPage() {
+  const navigate = useNavigate();
+  const { id } = useParams();
+  const { user } = useUser();
+  const [output, setOutput] = useState(null);
+  const [isRunning, setIsRunning] = useState(false);
+
+  const { data: sessionData, isLoading: loadingSession, refetch } = useSessionById(id);
+
+  const joinSessionMutation = useJoinSession();
+  const endSessionMutation = useEndSession();
+
+  const session = sessionData?.session;
+  const isHost = session?.host?.clerkId === user?.id;
+  const isParticipant = session?.participant?.clerkId === user?.id;
+
+  const { call, channel, chatClient, isInitializingCall, streamClient } = useStreamClient(
+    session,
+    loadingSession,
+    isHost,
+    isParticipant
+  );
+
+  // find the problem data based on session problem title
+  const problemData = session?.problem
+    ? Object.values(PROBLEMS).find((p) => p.title === session.problem)
+    : null;
+
+  const [selectedLanguage, setSelectedLanguage] = useState("javascript");
+  const [code, setCode] = useState(problemData?.starterCode?.[selectedLanguage] || "");
+
+  // auto-join session if user is not already a participant and not the host
+  useEffect(() => {
+    if (!session || !user || loadingSession) return;
+    if (isHost || isParticipant) return;
+
+    joinSessionMutation.mutate(id, { onSuccess: refetch });
+
+    // remove the joinSessionMutation, refetch from dependencies to avoid infinite loop
+  }, [session, user, loadingSession, isHost, isParticipant, id]);
+
+  // redirect the "participant" when session ends
+  useEffect(() => {
+    if (!session || loadingSession) return;
+
+    if (session.status === "completed") navigate("/dashboard");
+  }, [session, loadingSession, navigate]);
+
+  // update code when problem loads or changes
+  useEffect(() => {
+    if (problemData?.starterCode?.[selectedLanguage]) {
+      setCode(problemData.starterCode[selectedLanguage]);
+    }
+  }, [problemData, selectedLanguage]);
+
+  const handleLanguageChange = (e) => {
+    const newLang = e.target.value;
+    setSelectedLanguage(newLang);
+    // use problem-specific starter code
+    const starterCode = problemData?.starterCode?.[newLang] || "";
+    setCode(starterCode);
+    setOutput(null);
+  };
+
+  const handleRunCode = async () => {
+    setIsRunning(true);
+    setOutput(null);
+
+    const result = await executeCode(selectedLanguage, code);
+    setOutput(result);
+    setIsRunning(false);
+  };
+
+  const handleEndSession = () => {
+    if (confirm("Are you sure you want to end this session? All participants will be notified.")) {
+      // this will navigate the HOST to dashboard
+      endSessionMutation.mutate(id, { onSuccess: () => navigate("/dashboard") });
+    }
+  };
+
+  return (
+    <div className="h-screen bg-base-100 flex flex-col">
+      <Navbar />
+
+      <div className="flex-1">
+        <PanelGroup direction="horizontal">
+          {/* LEFT PANEL - CODE EDITOR & PROBLEM DETAILS */}
+          <Panel defaultSize={50} minSize={30}>
+            <PanelGroup direction="vertical">
+              {/* PROBLEM DSC PANEL */}
+              <Panel defaultSize={50} minSize={20}>
+                <div className="h-full overflow-y-auto bg-base-200">
+                  {/* HEADER SECTION */}
+                  <div className="p-6 bg-base-100 border-b border-base-300">
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h1 className="text-3xl font-bold text-base-content">
+                          {session?.problem || "Loading..."}
+                        </h1>
+                        {problemData?.category && (
+                          <p className="text-base-content/60 mt-1">{problemData.category}</p>
+                        )}
+                        <p className="text-base-content/60 mt-2">
+                          Host: {session?.host?.name || "Loading..."} â€¢{" "}
+                          {session?.participant ? 2 : 1}/2 participants
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <span
+                          className={`badge badge-lg ${getDifficultyBadgeClass(
+                            session?.difficulty
+                          )}`}
+                        >
+                          {session?.difficulty.slice(0, 1).toUpperCase() +
+                            session?.difficulty.slice(1) || "Easy"}
+                        </span>
+                        {isHost && session?.status === "active" && (
+                          <button
+                            onClick={handleEndSession}
+                            disabled={endSessionMutation.isPending}
+                            className="btn btn-error btn-sm gap-2"
+                          >
+                            {endSessionMutation.isPending ? (
+                              <Loader2Icon className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <LogOutIcon className="w-4 h-4" />
+                            )}
+                            End Session
+                          </button>
+                        )}
+                        {session?.status === "completed" && (
+                          <span className="badge badge-ghost badge-lg">Completed</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-6 space-y-6">
+                    {/* problem desc */}
+                    {problemData?.description && (
+                      <div className="bg-base-100 rounded-xl shadow-sm p-5 border border-base-300">
+                        <h2 className="text-xl font-bold mb-4 text-base-content">Description</h2>
+                        <div className="space-y-3 text-base leading-relaxed">
+                          <p className="text-base-content/90">{problemData.description.text}</p>
+                          {problemData.description.notes?.map((note, idx) => (
+                            <p key={idx} className="text-base-content/90">
+                              {note}
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* examples section */}
+                    {problemData?.examples && problemData.examples.length > 0 && (
+                      <div className="bg-base-100 rounded-xl shadow-sm p-5 border border-base-300">
+                        <h2 className="text-xl font-bold mb-4 text-base-content">Examples</h2>
+
+                        <div className="space-y-4">
+                          {problemData.examples.map((example, idx) => (
+                            <div key={idx}>
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="badge badge-sm">{idx + 1}</span>
+                                <p className="font-semibold text-base-content">Example {idx + 1}</p>
+                              </div>
+                              <div className="bg-base-200 rounded-lg p-4 font-mono text-sm space-y-1.5">
+                                <div className="flex gap-2">
+                                  <span className="text-primary font-bold min-w-[70px]">
+                                    Input:
+                                  </span>
+                                  <span>{example.input}</span>
+                                </div>
+                                <div className="flex gap-2">
+                                  <span className="text-secondary font-bold min-w-[70px]">
+                                    Output:
+                                  </span>
+                                  <span>{example.output}</span>
+                                </div>
+                                {example.explanation && (
+                                  <div className="pt-2 border-t border-base-300 mt-2">
+                                    <span className="text-base-content/60 font-sans text-xs">
+                                      <span className="font-semibold">Explanation:</span>{" "}
+                                      {example.explanation}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Constraints */}
+                    {problemData?.constraints && problemData.constraints.length > 0 && (
+                      <div className="bg-base-100 rounded-xl shadow-sm p-5 border border-base-300">
+                        <h2 className="text-xl font-bold mb-4 text-base-content">Constraints</h2>
+                        <ul className="space-y-2 text-base-content/90">
+                          {problemData.constraints.map((constraint, idx) => (
+                            <li key={idx} className="flex gap-2">
+                              <span className="text-primary">â€¢</span>
+                              <code className="text-sm">{constraint}</code>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </Panel>
+
+              <PanelResizeHandle className="h-2 bg-base-300 hover:bg-primary transition-colors cursor-row-resize" />
+
+              <Panel defaultSize={50} minSize={20}>
+                <PanelGroup direction="vertical">
+                  <Panel defaultSize={70} minSize={30}>
+                    <CodeEditorPanel
+                      selectedLanguage={selectedLanguage}
+                      code={code}
+                      isRunning={isRunning}
+                      onLanguageChange={handleLanguageChange}
+                      onCodeChange={(value) => setCode(value)}
+                      onRunCode={handleRunCode}
+                    />
+                  </Panel>
+
+                  <PanelResizeHandle className="h-2 bg-base-300 hover:bg-primary transition-colors cursor-row-resize" />
+
+                  <Panel defaultSize={30} minSize={15}>
+                    <OutputPanel output={output} />
+                  </Panel>
+                </PanelGroup>
+              </Panel>
+            </PanelGroup>
+          </Panel>
+
+          <PanelResizeHandle className="w-2 bg-base-300 hover:bg-primary transition-colors cursor-col-resize" />
+
+          {/* RIGHT PANEL - VIDEO CALLS & CHAT */}
+          <Panel defaultSize={50} minSize={30}>
+            <div className="h-full bg-base-200 p-4 overflow-auto">
+              {isInitializingCall ? (
+                <div className="h-full flex items-center justify-center">
+                  <div className="text-center">
+                    <Loader2Icon className="w-12 h-12 mx-auto animate-spin text-primary mb-4" />
+                    <p className="text-lg">Connecting to video call...</p>
+                  </div>
+                </div>
+              ) : !streamClient || !call ? (
+                <div className="h-full flex items-center justify-center">
+                  <div className="card bg-base-100 shadow-xl max-w-md">
+                    <div className="card-body items-center text-center">
+                      <div className="w-24 h-24 bg-error/10 rounded-full flex items-center justify-center mb-4">
+                        <PhoneOffIcon className="w-12 h-12 text-error" />
+                      </div>
+                      <h2 className="card-title text-2xl">Connection Failed</h2>
+                      <p className="text-base-content/70">Unable to connect to the video call</p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="h-full">
+                  <StreamVideo client={streamClient}>
+                    <StreamCall call={call}>
+                      <VideoCallUI chatClient={chatClient} channel={channel} />
+                    </StreamCall>
+                  </StreamVideo>
+                </div>
+              )}
+            </div>
+          </Panel>
+        </PanelGroup>
+      </div>
+    </div>
+  );
+}
+
+export default SessionPage;
+
