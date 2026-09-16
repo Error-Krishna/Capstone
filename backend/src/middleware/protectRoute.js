@@ -23,18 +23,28 @@ export const protectRoute = [
           "";
 
         const name =
-          `\({clerkUser.firstName || ""}\){clerkUser.lastName || ""}`.trim() ||
+          `${clerkUser.firstName || ""} ${clerkUser.lastName || ""}`.trim() ||
           clerkUser.username ||
           "User";
         console.log("USERNAME", name);
         const profileImage = clerkUser.imageUrl || "";
 
-        user = await User.create({
-          clerkId,
-          email: primaryEmail,
-          name,
-          profileImage,
-        });
+        // Recover an existing user if the email already exists.
+        user = await User.findOne({ email: primaryEmail });
+
+        if (user) {
+          user.clerkId = clerkId;
+          user.name = name;
+          user.profileImage = profileImage;
+          await user.save();
+        } else {
+          user = await User.create({
+            clerkId,
+            email: primaryEmail,
+            name,
+            profileImage,
+          });
+        }
 
         await Promise.all([
           streamClient.upsertUsers([

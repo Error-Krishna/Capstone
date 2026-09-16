@@ -14,11 +14,13 @@ function useStreamClient(session, loadingSession, isHost, isParticipant) {
   useEffect(() => {
     let videoCall = null;
     let chatClientInstance = null;
+    let cancelled = false;
 
     const initCall = async () => {
-      if (!session?.callId) return;
-      if (!isHost && !isParticipant) return;
-      if (session.status === "completed") return;
+      if (!session?.callId || (!isHost && !isParticipant) || session.status === "completed") {
+        setIsInitializingCall(false);
+        return;
+      }
 
       try {
         const { token, userId, userName, userImage } = await sessionApi.getStreamToken();
@@ -32,10 +34,21 @@ function useStreamClient(session, loadingSession, isHost, isParticipant) {
           token
         );
 
+        if (cancelled) {
+          await disconnectStreamClient();
+          return;
+        }
+
         setStreamClient(client);
 
         videoCall = client.call("default", session.callId);
         await videoCall.join({ create: true });
+        if (cancelled) {
+          await videoCall.leave();
+          await disconnectStreamClient();
+          return;
+        }
+
         setCall(videoCall);
 
         const apiKey = import.meta.env.VITE_STREAM_API_KEY;
@@ -49,10 +62,23 @@ function useStreamClient(session, loadingSession, isHost, isParticipant) {
           },
           token
         );
+        if (cancelled) {
+          await chatClientInstance.disconnectUser();
+          await disconnectStreamClient();
+          return;
+        }
+
         setChatClient(chatClientInstance);
 
         const chatChannel = chatClientInstance.channel("messaging", session.callId);
         await chatChannel.watch();
+
+        if (cancelled) {
+          await chatClientInstance.disconnectUser();
+          await disconnectStreamClient();
+          return;
+        }
+
         setChannel(chatChannel);
       } catch (error) {
         toast.error("Failed to join video call");
@@ -64,9 +90,9 @@ function useStreamClient(session, loadingSession, isHost, isParticipant) {
 
     if (session && !loadingSession) initCall();
 
-    // cleanup - performance reasons
     return () => {
-      // iife
+      cancelled = true;
+
       (async () => {
         try {
           if (videoCall) await videoCall.leave();

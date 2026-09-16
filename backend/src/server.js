@@ -33,7 +33,7 @@ app.post("/api/webhooks/clerk", async (req, res) => {
       const userData = {
         clerkId: id,
         email: email_addresses?.[0]?.email_address || "",
-        name: `\({first_name || ""}\){last_name || ""}`.trim() || "User",
+        name: `${first_name || ""} ${last_name || ""}`.trim() || "User",
         profileImage: image_url || "",
       };
 
