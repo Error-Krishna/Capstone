@@ -1,4 +1,5 @@
 import { verifyToken } from "@clerk/express";
+import { ENV } from "../lib/env.js";
 import User from "../models/User.js";
 import Session from "../models/Session.js";
 
@@ -11,7 +12,9 @@ export function setupCollaboration(io) {
         return next(new Error("Authentication required"));
       }
 
-      const verifiedToken = await verifyToken(token);
+      const verifiedToken = await verifyToken(token, {
+        secretKey: ENV.CLERK_SECRET_KEY,
+      });
 
       const clerkId = verifiedToken?.sub;
 
