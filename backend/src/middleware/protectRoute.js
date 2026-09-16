@@ -1,5 +1,6 @@
-import { requireAuth } from "@clerk/express";
+import { requireAuth, clerkClient } from "@clerk/express";
 import User from "../models/User.js";
+import { chatClient, streamClient } from "../lib/stream.js";
 
 export const protectRoute = [
   requireAuth(),
@@ -7,16 +8,55 @@ export const protectRoute = [
     try {
       const clerkId = req.auth().userId;
 
-      if (!clerkId) return res.status(401).json({ message: "Unauthorized - invalid token" });
+      if (!clerkId) {
+        return res.status(401).json({ message: "Unauthorized - invalid token" });
+      }
 
-      // find user in db by clerk ID
-      const user = await User.findOne({ clerkId });
+      let user = await User.findOne({ clerkId });
 
-      if (!user) return res.status(404).json({ message: "User not found" });
+      if (!user) {
+        const clerkUser = await clerkClient.users.getUser(clerkId);
 
-      // attach user to req
+        const primaryEmail =
+          clerkUser.emailAddresses?.find((e) => e.id === clerkUser.primaryEmailAddressId)?.emailAddress ||
+          clerkUser.emailAddresses?.[0]?.emailAddress ||
+          "";
+
+        const name =
+          `\({clerkUser.firstName || ""}\){clerkUser.lastName || ""}`.trim() ||
+          clerkUser.username ||
+          "User";
+        console.log("USERNAME", name);
+        const profileImage = clerkUser.imageUrl || "";
+
+        user = await User.create({
+          clerkId,
+          email: primaryEmail,
+          name,
+          profileImage,
+        });
+
+        await Promise.all([
+          streamClient.upsertUsers([
+            {
+              id: clerkId,
+              name,
+              image: profileImage,
+            },
+          ]),
+          chatClient.upsertUsers([
+            {
+              id: clerkId,
+              name,
+              image: profileImage,
+            },
+          ]),
+        ]).catch((err) => {
+          console.error("Stream upsert warning in protectRoute:", err.message);
+        });
+      }
+
       req.user = user;
-
       next();
     } catch (error) {
       console.error("Error in protectRoute middleware", error);
