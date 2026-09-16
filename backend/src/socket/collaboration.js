@@ -94,11 +94,18 @@ export function setupCollaboration(io) {
     });
 
     socket.on("code-change", ({ sessionId, code }) => {
+      console.log(
+        `Code change received from ${socket.user.clerkId} for session ${sessionId}`
+      );
+
       if (!socket.sessionId || socket.sessionId !== sessionId) {
+        console.log("Rejected code change: socket is not in this session");
         return;
       }
 
       const room = `session:${sessionId}`;
+
+      console.log(`Broadcasting code update to room ${room}`);
 
       socket.to(room).emit("code-update", {
         code,

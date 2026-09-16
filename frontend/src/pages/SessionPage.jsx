@@ -80,15 +80,14 @@ function SessionPage() {
 
     const connectCollaboration = async () => {
       try {
-        const token = await getToken();
-
-        if (!token || cancelled) return;
+        if (cancelled) return;
 
         const socketUrl = new URL(import.meta.env.VITE_API_URL).origin;
 
         socket = io(socketUrl, {
-          auth: {
-            token,
+          auth: async (cb) => {
+            const token = await getToken();
+            cb({ token });
           },
           withCredentials: true,
         });
@@ -109,6 +108,8 @@ function SessionPage() {
         });
 
         socket.on("code-update", ({ code: updatedCode }) => {
+          console.log("CODE UPDATE RECEIVED:", updatedCode);
+
           if (cancelled) return;
 
           setCode(updatedCode);
