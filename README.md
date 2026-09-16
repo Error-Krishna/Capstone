@@ -789,7 +789,7 @@ VITE_STREAM_API_KEY=...
 
 in the frontend.
 
-Make sure the Stream API key belongs to the same Stream application.
+Make sure  Stream API key belongs to the same Stream application.
 
 ---
 
