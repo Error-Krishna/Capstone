@@ -16,18 +16,20 @@ export async function createSession(req, res) {
     }
 
     const validProblems = {
-      "Two Sum": "Easy",
-      "Reverse String": "Easy",
-      "Valid Palindrome": "Easy",
-      "Maximum Subarray": "Medium",
-      "Container With Most Water": "Medium",
+      "Two Sum": "easy",
+      "Reverse String": "easy",
+      "Valid Palindrome": "easy",
+      "Maximum Subarray": "medium",
+      "Container With Most Water": "medium",
     };
+
+    const normalizedDifficulty = difficulty.toLowerCase();
 
     if (!Object.prototype.hasOwnProperty.call(validProblems, problem)) {
       return res.status(400).json({ message: "Invalid problem" });
     }
 
-    if (validProblems[problem] !== difficulty) {
+    if (validProblems[problem] !== normalizedDifficulty) {
       return res.status(400).json({ message: "Invalid difficulty for selected problem" });
     }
 
@@ -37,7 +39,7 @@ export async function createSession(req, res) {
     // Create the database session first.
     session = await Session.create({
       problem,
-      difficulty,
+      difficulty: normalizedDifficulty,
       host: userId,
       callId,
     });

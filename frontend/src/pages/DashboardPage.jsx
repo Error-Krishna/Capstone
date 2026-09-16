@@ -27,7 +27,7 @@ function DashboardPage() {
     createSessionMutation.mutate(
       {
         problem: roomConfig.problem,
-        difficulty: roomConfig.difficulty.toLowerCase(),
+        difficulty: roomConfig.difficulty,
       },
       {
         onSuccess: (data) => {
