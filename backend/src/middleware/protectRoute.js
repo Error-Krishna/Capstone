@@ -38,12 +38,32 @@ export const protectRoute = [
           user.profileImage = profileImage;
           await user.save();
         } else {
-          user = await User.create({
-            clerkId,
-            email: primaryEmail,
-            name,
-            profileImage,
-          });
+          try {
+            user = await User.create({
+              clerkId,
+              email: primaryEmail,
+              name,
+              profileImage,
+            });
+          } catch (createError) {
+            // Another concurrent request may have created this user.
+            if (createError.code !== 11000) {
+              throw createError;
+            }
+
+            user = await User.findOne({
+              $or: [{ clerkId }, { email: primaryEmail }],
+            });
+
+            if (!user) {
+              throw createError;
+            }
+
+            user.clerkId = clerkId;
+            user.name = name;
+            user.profileImage = profileImage;
+            await user.save();
+          }
         }
 
         await Promise.all([

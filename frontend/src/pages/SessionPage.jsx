@@ -165,7 +165,8 @@ function SessionPage() {
     setIsRunning(true);
     setOutput(null);
 
-    const result = await executeCode(selectedLanguage, code);
+    const token = await getToken();
+    const result = await executeCode(selectedLanguage, code, token);
     setOutput(result);
     setIsRunning(false);
   };

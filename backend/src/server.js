@@ -12,6 +12,7 @@ import User from "./models/User.js";
 
 import chatRoutes from "./routes/chatRoutes.js";
 import sessionRoutes from "./routes/sessionRoute.js";
+import executeRoutes from "./routes/executeRoute.js";
 import { setupCollaboration } from "./socket/collaboration.js";
 
 const app = express();
@@ -34,6 +35,7 @@ app.use(clerkMiddleware());
 
 app.use("/api/chat", chatRoutes);
 app.use("/api/sessions", sessionRoutes);
+app.use("/api/execute", executeRoutes);
 
 app.post("/api/webhooks/clerk", async (req, res) => {
   try {

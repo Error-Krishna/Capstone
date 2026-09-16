@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "@clerk/clerk-react";
 import { useNavigate, useParams } from "react-router";
 import { PROBLEMS } from "../data/problems";
 import Navbar from "../components/Navbar";
@@ -15,6 +16,7 @@ import confetti from "canvas-confetti";
 function ProblemPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { getToken } = useAuth();
 
   const [currentProblemId, setCurrentProblemId] = useState("two-sum");
   const [selectedLanguage, setSelectedLanguage] = useState("javascript");
@@ -85,7 +87,8 @@ function ProblemPage() {
     setIsRunning(true);
     setOutput(null);
 
-    const result = await executeCode(selectedLanguage, code);
+    const token = await getToken();
+    const result = await executeCode(selectedLanguage, code, token);
     setOutput(result);
     setIsRunning(false);
 
