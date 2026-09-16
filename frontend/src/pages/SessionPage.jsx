@@ -84,7 +84,9 @@ function SessionPage() {
 
         if (!token || cancelled) return;
 
-        socket = io(import.meta.env.VITE_API_URL, {
+        const socketUrl = new URL(import.meta.env.VITE_API_URL).origin;
+
+        socket = io(socketUrl, {
           auth: {
             token,
           },
