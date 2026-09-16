@@ -1,4 +1,4 @@
-import { useUser } from "@clerk/clerk-react";
+import { useAuth, useUser } from "@clerk/clerk-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useEndSession, useJoinSession, useSessionById } from "../hooks/useSessions";
@@ -13,12 +13,14 @@ import OutputPanel from "../components/OutputPanel";
 
 import useStreamClient from "../hooks/useStreamClient";
 import { StreamCall, StreamVideo } from "@stream-io/video-react-sdk";
+import { io } from "socket.io-client";
 import VideoCallUI from "../components/VideoCallUI";
 
 function SessionPage() {
   const navigate = useNavigate();
   const { id } = useParams();
   const { user } = useUser();
+  const { getToken } = useAuth();
   const [output, setOutput] = useState(null);
   const [isRunning, setIsRunning] = useState(false);
 
@@ -44,7 +46,10 @@ function SessionPage() {
     : null;
 
   const [selectedLanguage, setSelectedLanguage] = useState("javascript");
-  const [code, setCode] = useState(problemData?.starterCode?.[selectedLanguage] || "");
+  const [code, setCode] = useState(
+    problemData?.starterCode?.[selectedLanguage] || ""
+  );
+  const socketRef = useRef(null);
 
   // auto-join session if user is not already a participant and not the host
   const hasAttemptedJoin = useRef(false);
@@ -63,6 +68,72 @@ function SessionPage() {
       },
     });
   }, [session, user, loadingSession, isHost, isParticipant, id, joinSessionMutation, refetch]);
+
+  // Connect to the collaboration server for this session.
+  useEffect(() => {
+    if (!user || !session || loadingSession || session.status !== "active") {
+      return;
+    }
+
+    let socket;
+    let cancelled = false;
+
+    const connectCollaboration = async () => {
+      try {
+        const token = await getToken();
+
+        if (!token || cancelled) return;
+
+        socket = io(import.meta.env.VITE_API_URL, {
+          auth: {
+            token,
+          },
+          withCredentials: true,
+        });
+
+        socketRef.current = socket;
+
+        socket.on("connect", () => {
+          if (cancelled) return;
+
+          socket.emit("join-session", id, (response) => {
+            if (!response?.success) {
+              console.error(
+                "Failed to join collaboration session:",
+                response?.message
+              );
+            }
+          });
+        });
+
+        socket.on("code-update", ({ code: updatedCode }) => {
+          if (cancelled) return;
+
+          setCode(updatedCode);
+        });
+
+        socket.on("connect_error", (error) => {
+          console.error("Collaboration connection error:", error.message);
+        });
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to initialize collaboration:", error);
+        }
+      }
+    };
+
+    connectCollaboration();
+
+    return () => {
+      cancelled = true;
+
+      if (socket) {
+        socket.disconnect();
+      }
+
+      socketRef.current = null;
+    };
+  }, [user, session, loadingSession, session?.status, id, getToken]);
 
   // redirect the "participant" when session ends
   useEffect(() => {
@@ -245,7 +316,16 @@ function SessionPage() {
                       code={code}
                       isRunning={isRunning}
                       onLanguageChange={handleLanguageChange}
-                      onCodeChange={(value) => setCode(value)}
+                      onCodeChange={(value) => {
+                        setCode(value);
+
+                        if (socketRef.current?.connected) {
+                          socketRef.current.emit("code-change", {
+                            sessionId: id,
+                            code: value,
+                          });
+                        }
+                      }}
                       onRunCode={handleRunCode}
                     />
                   </Panel>

@@ -1,4 +1,6 @@
 import express from "express";
+import { createServer } from "http";
+import { Server } from "socket.io";
 import path from "path";
 import cors from "cors";
 import { clerkMiddleware } from "@clerk/express";
@@ -10,8 +12,19 @@ import User from "./models/User.js";
 
 import chatRoutes from "./routes/chatRoutes.js";
 import sessionRoutes from "./routes/sessionRoute.js";
+import { setupCollaboration } from "./socket/collaboration.js";
 
 const app = express();
+const httpServer = createServer(app);
+
+const io = new Server(httpServer, {
+  cors: {
+    origin: ENV.CLIENT_URL,
+    credentials: true,
+  },
+});
+
+setupCollaboration(io);
 
 const __dirname = path.resolve();
 
@@ -78,7 +91,7 @@ if (ENV.NODE_ENV === "production") {
 const startServer = async () => {
   try {
     await connectDB();
-    app.listen(ENV.PORT, () => console.log("Server is running on port:", ENV.PORT));
+    httpServer.listen(ENV.PORT, () => console.log("Server is running on port:", ENV.PORT));
   } catch (error) {
     console.error("💥 Error starting the server", error);
   }
